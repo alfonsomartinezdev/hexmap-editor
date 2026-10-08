@@ -625,7 +625,7 @@ async function openShow(){
   item("Everyone", "", null);
   const ps = players();
   for (const p of ps) item(p.label, `${p.set.size} ${p.set.size===1?"hex":"hexes"}`, p.key);
-  openModal("Highlight a player", [list]);
+  openModal("Highlight a player", [el("p",{class:"note"}, "Shows every hex a player has touched."), list]);
 }   // "deselect all" was tapped: the sheet stays open and taps build a new group   // after a hold or Grow, taps add and remove instead of switching
 function selectHex(id, add){
   if (add || adding){
