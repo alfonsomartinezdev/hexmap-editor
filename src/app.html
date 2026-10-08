@@ -1028,11 +1028,11 @@ new MutationObserver(draw).observe(document.documentElement, {attributes:true, a
 
 (async () => {
   const cl = window.claude;
-  if (!cl || !cl.use) { toast("Not connected: changes stay on this screen."); return; }
+  if (!cl || !cl.use) { toast("Preview: changes aren\u2019t shared or saved yet."); return; }
   const [d, u] = await Promise.all([cl.use("db"), cl.use("user")]);
   user = u;
   if (u){ try { myId = await u.id(); } catch(e){} try { if (await u.can("data.write") === false) setReadOnly(); } catch(e){} }
-  if (!d){ toast("Not connected: changes stay on this screen."); return; }
+  if (!d){ toast("Preview: changes aren\u2019t shared or saved yet."); return; }
   db = d;
   db.collection("posts").onSnapshot(snap => {
     posts = snap.docs.map(x => ({id:x.id, ...x.data()})).sort((a,b) => a.id < b.id ? -1 : 1);

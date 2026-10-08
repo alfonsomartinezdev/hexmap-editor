@@ -6,7 +6,8 @@
   "scripts": {
     "serve": "node tests/support/serve.js",
     "test": "playwright test",
-    "test:chromium": "SKIP_WEBKIT=1 playwright test"
+    "test:chromium": "SKIP_WEBKIT=1 playwright test",
+    "build": "node scripts/build.js"
   },
   "devDependencies": {
     "@playwright/test": "1.56.0"
