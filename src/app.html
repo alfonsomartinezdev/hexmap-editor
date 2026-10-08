@@ -621,11 +621,11 @@ async function openShow(){
   await loadNames([...new Set(posts.map(p => p.by))]);
   const list = el("div",{class:"keylist"});
   const item = (label, sub, key) => list.append(el("button",{type:"button", class:"link", "aria-current": (highlight ? highlight.key === key : key === null) ? "true" : null, onclick:()=>{ closeModal(); setHighlight(key); }},
-    el("strong",{}, label), el("span",{class:"when"}, sub)));
-  item("Everyone", "no highlight", null);
+    el("strong",{}, label), sub ? el("span",{class:"when"}, sub) : null));
+  item("Everyone", "", null);
   const ps = players();
   for (const p of ps) item(p.label, `${p.set.size} ${p.set.size===1?"hex":"hexes"}`, p.key);
-  openModal("Highlight a player", [el("p",{class:"note"}, "Every hex the player's posts have changed stays bright; the rest of the map dims."), ps.length ? list : el("p",{class:"empty"}, "No posts yet.")]);
+  openModal("Highlight a player", [list]);
 }   // "deselect all" was tapped: the sheet stays open and taps build a new group   // after a hold or Grow, taps add and remove instead of switching
 function selectHex(id, add){
   if (add || adding){
