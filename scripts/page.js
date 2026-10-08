@@ -6,7 +6,9 @@ const path = require("path");
 
 const APP = path.join(__dirname, "..", "src", "app.html");
 
-const wrap = body => `<!doctype html>
+const CONFIG = path.join(__dirname, "..", "site.config.json");
+
+const wrap = (body, config) => `<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -20,9 +22,12 @@ img{max-width:100%}
 </style>
 </head>
 <body>
-${body}
+${config ? `<script>window.MAP_CONFIG = ${JSON.stringify(config)};</script>\n` : ""}${body}
 </body>
 </html>
 `;
 
-module.exports = { page: () => wrap(fs.readFileSync(APP, "utf8")) };
+// withConfig: include site.config.json (the shared database). The site does; tests don't.
+module.exports = {
+  page: ({ withConfig = false } = {}) => wrap(fs.readFileSync(APP, "utf8"), withConfig ? JSON.parse(fs.readFileSync(CONFIG, "utf8")) : null)
+};

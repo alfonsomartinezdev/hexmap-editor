@@ -203,6 +203,12 @@ let hinted = false;
 try { hinted = localStorage.getItem("soc-hinted") === "1"; } catch(e){}
 let selectMode = false, moveState = null, sheetCat = null, sheetForm = null, focusHex = null;
 let db = null, user = null, myId = null, canWrite = true;
+let backend = null;                                  // where posts live: claude, firebase or local
+let draftDefs = {types:{}, peoples:{}};              // new lands, natures and peoples, published with the next post
+const lsGet = k => { try { return localStorage.getItem(k); } catch(e){ return null; } };
+const lsSet = (k,v) => { try { localStorage.setItem(k, v); } catch(e){} };
+let deviceId = lsGet("soc-device"); if (!deviceId){ deviceId = "d_" + Math.random().toString(36).slice(2,12); lsSet("soc-device", deviceId); }
+const myName = () => (lsGet("soc-name") || "").trim();
 const names = new Map();        // user id -> display name
 
 const $ = id => document.getElementById(id);
@@ -220,13 +226,29 @@ function landInfo(t){
 function merge(a, p){
   if (!p) return a || null;
   const o = {...(a||{})};
-  for (const [k,v] of Object.entries(p)){ if (v===null || (Array.isArray(v) && !v.length)) delete o[k]; else o[k]=v; }
+  for (const [k,v] of Object.entries(p)){ if (v===null || v===false || (Array.isArray(v) && !v.length)) delete o[k]; else o[k]=v; }
   return Object.keys(o).length ? o : null;
 }
 function fold(list){
   const m = new Map();
   for (const p of list) for (const [id,patch] of Object.entries(p.changes||{})){ const v = merge(m.get(id), patch); if (v) m.set(id,v); else m.delete(id); }
   return m;
+}
+// posts sort by server time, then id
+const byTime = (a,b) => ((a.at||0) - (b.at||0)) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+// a cleared field is sent as false: Firebase would silently drop null or []
+function wire(changes){
+  const out = {};
+  for (const [id,p] of Object.entries(changes)){ const q = {}; for (const [k,v] of Object.entries(p)) q[k] = (v===null || (Array.isArray(v) && !v.length)) ? false : v; out[id] = q; }
+  return out;
+}
+// custom lands, peoples and the age travel inside posts; replay them in order
+function applyDefs(list){
+  for (const p of list){
+    for (const [id,t] of Object.entries(p.types || {})){ if (t.kind === "land") customLand.set("x-"+id, {name:t.name, color:t.color||"#8f8a82", glyph:t.glyph}); else if (t.name) customNat.add(t.name); }
+    for (const [id,v] of Object.entries(p.peoples || {})) peoples.set(id, {name:v.name, color:v.color});
+    if (p.world){ if (AGES[p.world.age]) age = p.world.age; if (p.world.cols && p.world.rows){ COLS = p.world.cols; ROWS = p.world.rows; } }
+  }
 }
 const same = (a,b) => JSON.stringify(a??null) === JSON.stringify(b??null);
 function view(id){ return histIdx!==null ? (histState.get(id)||null) : merge(base.get(id), draft.get(id)); }
@@ -871,7 +893,7 @@ function renderDraftBar(){
   if (!n) { confirmDiscard = false; return; }
   if (confirmDiscard){
     bar.append(el("span",{class:"what"}, `Start over? This clears your ${n} ${n===1?"change":"changes"}.`),
-      el("button",{type:"button", class:"btn danger", onclick:()=>{ draft.clear(); undoStack.length = 0; confirmDiscard=false; saveDraftLocal(); renderDraftBar(); renderSheet(); draw(); toast("Cleared. Your post is empty again."); }}, "Start over"),
+      el("button",{type:"button", class:"btn danger", onclick:()=>{ draft.clear(); draftDefs = {types:{}, peoples:{}}; undoStack.length = 0; confirmDiscard=false; saveDraftLocal(); renderDraftBar(); renderSheet(); draw(); toast("Cleared. Your post is empty again."); }}, "Start over"),
       el("button",{type:"button", class:"btn", onclick:()=>{ confirmDiscard=false; renderDraftBar(); }}, "Keep"));
     return;
   }
@@ -881,19 +903,46 @@ function renderDraftBar(){
     el("span",{class:"grow"}),
     el("button",{type:"button", class:"btn primary", id:"saveBtn", onclick:savePost}, "Publish post"));
 }
+function newPost(extra){
+  return Object.assign({ id: "p" + Date.now().toString(36) + rid().slice(0,4), by: myId || deviceId, name: myName() || null }, extra);
+}
+// a name is asked for once, the first time someone publishes
+function withName(then){
+  if (!backend || !backend.needsName || myName()) return then();
+  askName(then);
+}
+function askName(then){
+  const known = [...new Set(posts.map(p => p.name).filter(Boolean))].sort((a,b) => a.localeCompare(b));
+  const go = nm => { nm = (nm||"").trim().slice(0,24); if (!nm) { input.focus(); return; } lsSet("soc-name", nm); closeModal(); toast(`Posting as ${nm}.`); if (then) then(); };
+  const input = el("input",{id:"playerName", placeholder:"Your name", autocomplete:"nickname", maxlength:"24"}); input.value = myName();
+  const body = [el("p",{class:"note"}, "Your posts show this name. It's saved on this device.")];
+  if (known.length) body.push(el("p",{class:"sub"},"Tap your name"), el("div",{class:"chips"}, known.map(n => el("button",{type:"button", class:"chip", style:"padding-right:12px", onclick:()=>go(n)}, n))), el("p",{class:"sub"},"Or type a new one"));
+  body.push(el("form",{class:"form", onsubmit:(e)=>{ e.preventDefault(); go(input.value); }}, input, el("div",{class:"row"}, el("button",{type:"submit", class:"btn primary"}, then ? "Continue" : "Save"))));
+  openModal("Who's posting?", body);
+}
 async function savePost(){
   if (!draft.size) return;
-  const changes = Object.fromEntries(draft), post = {id: "p" + Date.now().toString(36) + rid().slice(0,4), by: myId || null, at: Date.now(), changes};
+  if (backend && backend.needsName && !myName()) return withName(savePost);
+  const post = newPost({ changes: wire(Object.fromEntries(draft)) });
+  if (Object.keys(draftDefs.types).length) post.types = draftDefs.types;
+  if (Object.keys(draftDefs.peoples).length) post.peoples = draftDefs.peoples;
   const btn = $("saveBtn"); if (btn) { btn.disabled = true; btn.textContent = "Publishing…"; }
-  if (db){
-    try { await db.doc("posts/"+post.id).set({by:post.by, at:post.at, changes}); }
-    catch(e){ if (btn){ btn.disabled=false; btn.textContent="Publish post"; } toast(e && e.code==="invalid_argument" ? "You can view this map but not change it." : "Couldn't publish. Your changes are kept; try again."); return; }
-  } else { posts.push(post); posts.sort((a,b)=>a.id<b.id?-1:1); base = fold(posts); }
-  draft.clear(); undoStack.length = 0; saveDraftLocal(); clearSelection(); renderDraftBar(); draw();
+  try { await backend.publish(post); }
+  catch(e){ if (btn){ btn.disabled=false; btn.textContent="Publish post"; } toast(e && e.code==="invalid_argument" ? "You can view this map but not change it." : "Couldn't publish. Your changes are kept; try again."); return; }
+  draft.clear(); draftDefs = {types:{}, peoples:{}}; undoStack.length = 0; saveDraftLocal(); clearSelection(); renderDraftBar(); draw();
   toast("Published. Everyone can see it now."); say("Post published.");
 }
-function saveDraftLocal(){ try { localStorage.setItem("soc-draft", JSON.stringify([...draft])); } catch(e){} }
-function loadDraftLocal(){ try { const v = JSON.parse(localStorage.getItem("soc-draft")||"[]"); for (const [k,p] of v) draft.set(k,p); } catch(e){} }
+async function publishWorld(world){
+  if (backend && backend.needsName && !myName()) return withName(() => publishWorld(world));
+  try { await backend.publish(newPost({ changes: {}, world })); toast("Saved for everyone."); }
+  catch(e){ toast("Couldn't save that. Try again."); }
+}
+function saveDraftLocal(){ lsSet("soc-draft", JSON.stringify([...draft])); lsSet("soc-defs", JSON.stringify(draftDefs)); }
+function loadDraftLocal(){
+  try { const v = JSON.parse(lsGet("soc-draft")||"[]"); for (const [k,p] of v) draft.set(k,p); } catch(e){}
+  try { const d = JSON.parse(lsGet("soc-defs")||"null"); if (d && d.types && d.peoples) draftDefs = d; } catch(e){}
+  applyDefs([draftDefs]);
+}
 
 /* ================= shared lists ================= */
 async function addCustom(kind, name, color, glyph){
@@ -902,19 +951,19 @@ async function addCustom(kind, name, color, glyph){
     for (const [k,v] of customLand) if (v.name.toLowerCase() === lc) return k;
     const b = LAND.find(l => l[1].toLowerCase() === lc); if (b) return b[0];
     const id = rid(); customLand.set("x-"+id, {name, color, glyph});
-    if (db) try { await db.doc("types/"+id).set({kind, name, color, glyph}); } catch(e){}
+    draftDefs.types[id] = {kind, name, color, glyph}; saveDraftLocal();
     return "x-"+id;
   }
   const b = NATURES.find(n => n[0].toLowerCase() === lc); if (b) return b[0];
   for (const n of customNat) if (n.toLowerCase() === lc) return n;
   customNat.add(name);
-  if (db) try { await db.doc("types/"+rid()).set({kind, name}); } catch(e){}
+  draftDefs.types[rid()] = {kind, name}; saveDraftLocal();
   return name;
 }
 async function addPeople(name, color){
   for (const [pid,p] of peoples) if (p.name.toLowerCase() === name.toLowerCase()) return pid;
   const pid = rid(); peoples.set(pid, {name, color});
-  if (db) try { await db.doc("peoples/"+pid).set({name, color}); } catch(e){}
+  draftDefs.peoples[pid] = {name, color}; saveDraftLocal();
   return pid;
 }
 
@@ -960,7 +1009,7 @@ function openKey(){
   openModal("Map key", out);
 };
 
-function nameOf(id){ return id ? (id === myId ? "You" : (names.get(id) || "A player")) : "A player"; }
+function postName(p){ return p.by && (p.by === myId || p.by === deviceId) ? "You" : (p.name || names.get(p.by) || "A player"); }
 async function loadNames(ids){
   if (!user || !user.profiles) return; const need = ids.filter(i => i && !names.has(i)); if (!need.length) return;
   try { const ps = await user.profiles(need); for (const i of need) if (ps && ps[i] && ps[i].name) names.set(i, ps[i].name); } catch(e){}
@@ -973,25 +1022,25 @@ async function openHistory(){
   for (let i = posts.length-1; i >= 0; i--){
     const p = posts[i], n = Object.keys(p.changes||{}).length;
     list.append(el("button",{type:"button", class:"link", "aria-current": histIdx===i ? "true" : null, onclick:()=>{ showHistory(i); closeModal(); }},
-      el("strong",{}, nameOf(p.by)), `${n} ${n===1?"hex":"hexes"}`, el("span",{class:"when"}, when(p.at))));
+      el("strong",{}, postName(p)), n ? `${n} ${n===1?"hex":"hexes"}` : p.world && AGES[p.world.age] ? AGES[p.world.age][0] : "", el("span",{class:"when"}, when(p.at))));
   }
   openModal("History", [histIdx !== null ? el("button",{type:"button", class:"btn", onclick:()=>{ showHistory(null); closeModal(); }}, "Back to the map now") : null, list].filter(Boolean));
 };
 function showHistory(i){
   histIdx = i;
   if (i === null){ histState = null; $("histBanner").hidden = true; }
-  else { histState = fold(posts.slice(0,i+1)); const p = posts[i]; $("histText").textContent = `After ${nameOf(p.by)}'s post · ${when(p.at)}. Outlined hexes changed.`; $("histBanner").hidden = false; }
+  else { histState = fold(posts.slice(0,i+1)); const p = posts[i]; $("histText").textContent = `After ${postName(p)}'s post · ${when(p.at)}. Outlined hexes changed.`; $("histBanner").hidden = false; }
   moveState = null; renderSheet(); renderDraftBar(); draw();
 }
 $("histBack").onclick = () => showHistory(null);
 
 function openWorld(){
   const segs = el("div",{class:"segs"});
-  for (const a of [1,2,3]) segs.append(el("button",{type:"button", class:"btn", "aria-pressed":String(age===a), disabled: !canWrite || null, onclick: async ()=>{ age=a; renderAge(); closeModal(); if (db) try { await db.doc("world/meta").set({age, cols:COLS, rows:ROWS}); } catch(e){ toast("Couldn't save the age."); } }}, AGES[a][0]));
+  for (const a of [1,2,3]) segs.append(el("button",{type:"button", class:"btn", "aria-pressed":String(age===a), disabled: !canWrite || null, onclick: async ()=>{ age=a; renderAge(); closeModal(); await publishWorld({age, cols:COLS, rows:ROWS}); }}, AGES[a][0]));
   let cols = COLS, rows = ROWS;
   const ci = el("input",{id:"cols", type:"number", min:"4", max:"80", value:String(COLS), inputmode:"numeric"}); ci.oninput = () => cols = +ci.value;
   const ri = el("input",{id:"rows", type:"number", min:"4", max:"120", value:String(ROWS), inputmode:"numeric"}); ri.oninput = () => rows = +ri.value;
-  const size = el("form",{class:"form", onsubmit: async (e)=>{ e.preventDefault(); if (!(cols>=4 && cols<=80 && rows>=4 && rows<=120)) { toast("Use 4 to 80 across and 4 to 120 down."); return; } COLS=cols; ROWS=rows; fit(); closeModal(); if (db) try { await db.doc("world/meta").set({age, cols, rows}); } catch(e){} }},
+  const size = el("form",{class:"form", onsubmit: async (e)=>{ e.preventDefault(); if (!(cols>=4 && cols<=80 && rows>=4 && rows<=120)) { toast("Use 4 to 80 across and 4 to 120 down."); return; } COLS=cols; ROWS=rows; fit(); closeModal(); await publishWorld({age, cols, rows}); }},
     el("label",{for:"cols"},"Hexes across"), ci, el("label",{for:"rows"},"Hexes down"), ri,
     el("p",{class:"note"},"The default is 32 across and 53 down. Shrinking hides hexes outside the new edge; it doesn't erase them."),
     canWrite ? el("div",{class:"row"}, el("button",{type:"submit", class:"btn primary"},"Change size")) : null);
@@ -1004,7 +1053,8 @@ $("menuBtn").onclick = () => {
   openModal("Menu", [
     item("History", posts.length ? `${posts.length} published ${posts.length===1?"post":"posts"}` : "No posts yet", openHistory),
     item("Key", "What the colors and symbols mean", openKey),
-    item("Age and map size", `${AGES[age][0]} · ${COLS} × ${ROWS} hexes`, openWorld)
+    item("Age and map size", `${AGES[age][0]} · ${COLS} × ${ROWS} hexes`, openWorld),
+    backend && backend.needsName ? item("Your name", myName() || "Not set yet", () => askName(null)) : null
   ]);
 };
 
@@ -1026,33 +1076,78 @@ new ResizeObserver(resize).observe(stage);
 matchMedia("(prefers-color-scheme: dark)").addEventListener?.("change", draw);
 new MutationObserver(draw).observe(document.documentElement, {attributes:true, attributeFilter:["data-theme"]});
 
-(async () => {
-  const cl = window.claude;
-  if (!cl || !cl.use) { toast("Preview: changes aren\u2019t shared or saved yet."); return; }
+// every backend does two things: stream all posts, and add one
+function onPosts(list){
+  const pc = COLS, pr = ROWS;
+  posts = list.slice().sort(byTime);
+  applyDefs(posts); applyDefs([draftDefs]); renderAge();
+  if (COLS !== pc || ROWS !== pr) fit();
+  base = fold(posts);
+  // drop draft fields that now match the shared map
+  for (const [id,p] of [...draft]){ const b = base.get(id)||{}; for (const k of Object.keys(p)) if (same(b[k], p[k])) delete p[k]; if (!Object.keys(p).length) draft.delete(id); }
+  if (histIdx !== null){ if (histIdx >= posts.length) showHistory(null); else histState = fold(posts.slice(0,histIdx+1)); }
+  renderDraftBar(); renderSheet(); draw();
+}
+const localBackend = () => ({
+  kind:"local", needsName:false,
+  start(){ toast("Preview: changes aren\u2019t shared or saved yet."); },
+  async publish(post){ onPosts([...posts, {...post, at: Date.now()}]); }
+});
+// Firebase Realtime Database over plain REST: a live stream to read, a PUT to add a post
+function firebaseBackend(cfg){
+  const root = cfg.databaseURL.replace(/\/$/, "");
+  return {
+    kind:"firebase", needsName:true,
+    start(){
+      const all = new Map(); let warned = false;
+      const emit = () => { warned = false; onPosts([...all].map(([id,v]) => ({...v, id}))); };
+      const es = new EventSource(root + "/posts.json");
+      es.addEventListener("put", e => {
+        const {path, data} = JSON.parse(e.data), parts = path.split("/").filter(Boolean);
+        if (!parts.length){ all.clear(); for (const [k,v] of Object.entries(data || {})) all.set(k, v); }
+        else if (parts.length === 1){ if (data === null) all.delete(parts[0]); else all.set(parts[0], data); }
+        else { const cur = all.get(parts[0]) || {}; let o = cur; for (const k of parts.slice(1,-1)) o = o[k] = o[k] || {}; o[parts.at(-1)] = data; all.set(parts[0], cur); }
+        emit();
+      });
+      es.addEventListener("patch", e => {
+        const {path, data} = JSON.parse(e.data), parts = path.split("/").filter(Boolean);
+        if (!parts.length) for (const [k,v] of Object.entries(data || {})) all.set(k, v);
+        else all.set(parts[0], Object.assign(all.get(parts[0]) || {}, data));
+        emit();
+      });
+      es.onerror = () => { if (!warned){ warned = true; toast("Reconnecting to the map…"); } };
+    },
+    async publish(post){
+      const {id, ...body} = post;
+      const r = await fetch(`${root}/posts/${encodeURIComponent(id)}.json`, { method:"PUT", headers:{"content-type":"application/json"}, body: JSON.stringify({...body, at: {".sv":"timestamp"}}) });
+      if (!r.ok) throw new Error("publish failed: " + r.status);
+    }
+  };
+}
+async function claudeBackend(cl){
   const [d, u] = await Promise.all([cl.use("db"), cl.use("user")]);
   user = u;
   if (u){ try { myId = await u.id(); } catch(e){} try { if (await u.can("data.write") === false) setReadOnly(); } catch(e){} }
-  if (!d){ toast("Preview: changes aren\u2019t shared or saved yet."); return; }
+  if (!d) return null;
   db = d;
-  db.collection("posts").onSnapshot(snap => {
-    posts = snap.docs.map(x => ({id:x.id, ...x.data()})).sort((a,b) => a.id < b.id ? -1 : 1);
-    base = fold(posts);
-    // drop draft fields that now match the shared map
-    for (const [id,p] of [...draft]){ const b = base.get(id)||{}; for (const k of Object.keys(p)) if (same(b[k], p[k])) delete p[k]; if (!Object.keys(p).length) draft.delete(id); }
-    if (histIdx !== null){ if (histIdx >= posts.length) showHistory(null); else histState = fold(posts.slice(0,histIdx+1)); }
-    renderDraftBar(); renderSheet(); draw();
-  }, () => toast("Lost connection. Reload to see new posts."));
-  db.collection("types").onSnapshot(snap => {
-    customLand.clear(); customNat.clear();
-    for (const x of snap.docs){ const v = x.data(); if (v.kind === "land") customLand.set("x-"+x.id, {name:v.name, color:v.color||"#8f8a82", glyph:v.glyph}); else if (v.kind === "nature") customNat.add(v.name); }
-    draw(); if (sheetCat) renderSheet();
-  });
-  db.collection("peoples").onSnapshot(snap => { peoples.clear(); for (const x of snap.docs){ const v = x.data(); peoples.set(x.id, {name:v.name, color:v.color}); } draw(); if (sheetCat) renderSheet(); });
-  db.doc("world/meta").onSnapshot(s => {
-    if (!s.exists) return; const v = s.data();
-    if (AGES[v.age] && v.age !== age){ age = v.age; renderAge(); }
-    if (v.cols && v.rows && (v.cols !== COLS || v.rows !== ROWS)){ COLS = v.cols; ROWS = v.rows; fit(); }
-  });
+  return {
+    kind:"claude", needsName:false,
+    start(){
+      db.collection("posts").onSnapshot(snap => onPosts(snap.docs.map(x => ({id:x.id, ...x.data()}))), () => toast("Lost connection. Reload to see new posts."));
+      // older copies kept lands, peoples and the age outside posts
+      db.collection("types").onSnapshot(snap => { applyDefs([{types: Object.fromEntries(snap.docs.map(x => [x.id, x.data()]))}]); draw(); if (sheetCat) renderSheet(); });
+      db.collection("peoples").onSnapshot(snap => { applyDefs([{peoples: Object.fromEntries(snap.docs.map(x => [x.id, x.data()]))}]); draw(); if (sheetCat) renderSheet(); });
+      db.doc("world/meta").onSnapshot(s => { if (s.exists){ applyDefs([{world: s.data()}]); applyDefs(posts.filter(p => p.world)); renderAge(); fit(); } });
+    },
+    async publish(post){ const {id, ...body} = post; await db.doc("posts/"+id).set({...body, at: Date.now()}); }
+  };
+}
+(async () => {
+  const cl = window.claude, cfg = window.MAP_CONFIG;
+  if (cl && cl.use) backend = await claudeBackend(cl);
+  if (!backend && cfg && cfg.databaseURL) backend = firebaseBackend(cfg);
+  if (!backend) backend = localBackend();
+  backend.start();
 })();
 })();
 </script>

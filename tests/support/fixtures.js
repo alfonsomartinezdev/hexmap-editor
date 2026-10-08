@@ -4,6 +4,7 @@ const { test: base, expect } = require("@playwright/test");
 const path = require("path");
 
 const MOCK = path.join(__dirname, "mock-claude.js");
+const FIREBASE = path.join(__dirname, "fake-firebase.js");
 
 const test = base.extend({
   app: async ({ page }, use) => {
@@ -14,8 +15,10 @@ const test = base.extend({
 
     const app = {
       page, errors,
-      /** open the map; mock: false (local only) or an options object for the fake shared store */
-      async open({ mock = {} } = {}) {
+      /** open the map. mock: options for the fake claude.ai store, or false.
+       *  firebase: true to use the fake Firebase database instead (the GitHub Pages setup). */
+      async open({ mock = {}, firebase = false } = {}) {
+        if (firebase) { mock = false; await page.addInitScript({ path: FIREBASE }); }
         if (mock) {
           await page.addInitScript(o => { window.__mockOptions = o; }, mock);
           await page.addInitScript({ path: MOCK });

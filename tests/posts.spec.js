@@ -97,7 +97,8 @@ test.describe("publishing", () => {
     await app.page.locator("#mBody button.link", { hasText: "Age and map size" }).click();
     await app.page.getByRole("button", { name: "Second Age" }).click();
     await expect(app.page.locator("#ageLabel")).toHaveText("Second Age · area 7");
-    await expect.poll(() => app.page.evaluate(() => window.__mockStore.all()["world/meta"])).toMatchObject({ age: 2 });
+    // the age travels as a small post, so history shows when the world moved on
+    await expect.poll(() => app.page.evaluate(() => Object.entries(window.__mockStore.all()).filter(([k]) => k.startsWith("posts/")).map(([, v]) => v.world))).toEqual([expect.objectContaining({ age: 2 })]);
   });
 });
 
