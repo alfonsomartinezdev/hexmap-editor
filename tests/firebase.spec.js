@@ -100,7 +100,7 @@ test("changing the age publishes a small post that shows in history", async ({ a
   await expect(app.page.locator("#ageLabel")).toHaveText("Second Age · area 7");
   await app.page.locator("#menuBtn").click();
   await app.page.locator("#mBody button.link", { hasText: "History" }).click();
-  await expect(app.page.locator("#mBody .keylist button.link").first()).toContainText("You");
+  await expect(app.page.locator("#mBody .keylist button.link").first()).toContainText("Ash (you)");
   await expect(app.page.locator("#mBody .keylist button.link").first()).toContainText("Second Age");
 });
 

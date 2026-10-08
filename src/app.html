@@ -996,7 +996,13 @@ function openKey(){
   openModal("Map key", out);
 };
 
-function postName(p){ return p.by && (p.by === myId || p.by === deviceId) ? "You" : (p.name || names.get(p.by) || "A player"); }
+const isMine = p => !!p.by && (p.by === myId || p.by === deviceId);
+// "Ash (you)" for your own posts, so you see the name others see
+function postName(p){
+  const nm = p.name || names.get(p.by) || (isMine(p) ? myName() : "");
+  if (isMine(p)) return nm ? `${nm} (you)` : "You";
+  return nm || "A player";
+}
 async function loadNames(ids){
   if (!user || !user.profiles) return; const need = ids.filter(i => i && !names.has(i)); if (!need.length) return;
   try { const ps = await user.profiles(need); for (const i of need) if (ps && ps[i] && ps[i].name) names.set(i, ps[i].name); } catch(e){}
@@ -1016,7 +1022,7 @@ async function openHistory(){
 function showHistory(i){
   histIdx = i;
   if (i === null){ histState = null; $("histBanner").hidden = true; }
-  else { histState = fold(posts.slice(0,i+1)); const p = posts[i]; $("histText").textContent = `After ${postName(p)}'s post · ${when(p.at)}. Outlined hexes changed.`; $("histBanner").hidden = false; }
+  else { histState = fold(posts.slice(0,i+1)); const p = posts[i]; $("histText").textContent = `After ${isMine(p) ? "your" : postName(p) + "'s"} post · ${when(p.at)}. Outlined hexes changed.`; $("histBanner").hidden = false; }
   moveState = null; renderSheet(); renderDraftBar(); draw();
 }
 $("histBack").onclick = () => showHistory(null);

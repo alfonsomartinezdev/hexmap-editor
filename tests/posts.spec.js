@@ -80,7 +80,7 @@ test.describe("publishing", () => {
     await app.page.locator("#mBody button.link", { hasText: "History" }).click();
     const items = app.page.locator("#mBody .keylist button.link");
     await expect(items).toHaveCount(2);
-    await expect(items.nth(0)).toContainText("You");
+    await expect(items.nth(0)).toContainText("Ash (you)");
     await expect(items.nth(1)).toContainText("Rowan");
     await items.nth(1).click();
     await expect(app.page.locator("#histBanner")).toContainText("After Rowan's post");
