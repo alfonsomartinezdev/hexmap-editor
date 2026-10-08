@@ -434,6 +434,28 @@ function roughHex(cx,cy,s,seed,amt){
 const seedOf = (c,r) => c*92.7 + r*37.3;
 function lum(hex){ const n=parseInt(hex.slice(1),16); return (0.299*(n>>16)+0.587*((n>>8)&255)+0.114*(n&255))/255; }
 const inkFor = color => lum(color) < 0.55 ? "rgba(255,255,255,.85)" : "rgba(20,24,34,.75)";
+/* ---- marker-on-paper land: a light wash with hatching on top, the same for every terrain ---- */
+function hexToRgb(h){ const n = parseInt(h.slice(1),16); return [n>>16, (n>>8)&255, n&255]; }
+function mixHex(a, b, t){ const A = hexToRgb(a), B = hexToRgb(b); return "#" + A.map((v,i) => Math.round(v*(1-t) + B[i]*t).toString(16).padStart(2,"0")).join(""); }
+const patCache = new Map();
+function washOf(color){ return isDark() ? mixHex(color, "#1d2220", .35) : mixHex(color, "#f1f0ea", .45); }
+function landFill(L){
+  // one treatment for every land, built-in or custom: a wash of its own color with loose diagonal marker strokes
+  const key = L.color + "|" + (isDark() ? "d" : "l");
+  if (patCache.has(key)) return patCache.get(key);
+  const N = 120, cv = document.createElement("canvas"); cv.width = cv.height = N;
+  const c = cv.getContext("2d");
+  c.fillStyle = washOf(L.color); c.fillRect(0,0,N,N);
+  c.strokeStyle = isDark() ? mixHex(L.color, "#f3f0e6", .22) : mixHex(L.color, "#141414", .22);
+  c.lineCap = "round"; c.lineWidth = 4.2; c.globalAlpha = .9;
+  for (let k = 0, i = -N; i < 2*N; i += 15, k++){                    // lines N apart share a wobble so the tile repeats seamlessly
+    const j = wob(k % 8) * 3;
+    c.beginPath(); c.moveTo(i, 0); c.quadraticCurveTo(i + N/2 + j, N/2 - j, i + N, N); c.stroke();
+  }
+  const pat = ctx.createPattern(cv, "repeat");
+  pat.setTransform(new DOMMatrix().scale(15 / N));                  // one tile = 15 map units, about one hex
+  patCache.set(key, pat); return pat;
+}
 
 function glyph(g, cx, cy, s, ink, label, c2){
   const C = c2 || ctx;
@@ -485,18 +507,37 @@ function paint(){
   ctx.setTransform(DPR*V.k,0,0,DPR*V.k,DPR*V.ox,DPR*V.oy);
   const unmade = css("--unmade"), grid = css("--grid"), accent = css("--accent-line"), sel = css("--sel"), ink = css("--line"), dcol = css("--draft"), surface = css("--surface"), fg = css("--fg");
   const px = hexPx(), lw = 1/V.k;
+  patCache.size > 40 && patCache.clear();
   const [x0,y0] = toWorld(-30,-30), [x1,y1] = toWorld(W+30,H+30);
   const vis = (cx,cy) => cx>=x0 && cx<=x1 && cy>=y0 && cy<=y1;
   const cells = [];
   for (let r=0;r<ROWS;r++) for (let c=0;c<COLS;c++){
     const [cx,cy] = center(c,r); if (!vis(cx,cy)) continue;
     const id = hid(c,r), d = view(id), L = d && landInfo(d.t);
-    if (L){ roughHex(cx,cy,S*1.02,seedOf(c,r),.06); ctx.fillStyle = L.color; ctx.fill();
-      if (px > 9){ ctx.strokeStyle = "rgba(20,20,20,.55)"; ctx.lineWidth = Math.max(1.1*lw, S*.035); ctx.lineJoin = "round"; ctx.stroke(); } }
+    if (L){ roughHex(cx,cy,S*1.03,seedOf(c,r),.04); ctx.fillStyle = px >= 14 ? landFill(L) : washOf(L.color); ctx.fill();
+      if (px > 9){ ctx.strokeStyle = isDark() ? "rgba(243,240,230,.18)" : "rgba(20,20,20,.16)"; ctx.lineWidth = Math.max(lw, S*.025); ctx.lineJoin = "round"; ctx.stroke(); } }
     else { hexPath(cx,cy,S+.03); ctx.fillStyle = unmade; ctx.fill();
       if (px > 9){ roughHex(cx,cy,S*.97,seedOf(c,r),.05); ctx.strokeStyle = grid; ctx.lineWidth = lw; ctx.stroke(); } }
-    if (L && px >= 16 && !(d.m && d.m.length)) glyph(L.glyph, cx, cy - (px>=40 ? S*.25 : 0), S, inkFor(L.color), L.name);
+    if (L && px >= 16 && !(d.m && d.m.length)) glyph(L.glyph, cx, cy - (px>=40 ? S*.25 : 0), S, ink, L.name);
     if (d) cells.push([c,r,cx,cy,d,L]);
+  }
+  // ink the coastlines: a bold marker line wherever one terrain meets another or the empty page
+  if (px > 6){
+    ctx.strokeStyle = ink; ctx.lineCap = "round"; ctx.lineJoin = "round";
+    for (const [c,r,cx,cy,d,L] of cells){
+      if (!L) continue;
+      const nb = edgeNeighbors(c,r);
+      for (let i=0;i<6;i++){
+        const [nc,nr] = nb[i]; const nd = inB(nc,nr) ? view(hid(nc,nr)) : null;
+        if (nd && nd.t === d.t) continue;
+        const a1 = Math.PI/180*(60*i-30), a2 = Math.PI/180*(60*(i+1)-30), s0 = S*1.0, sd = seedOf(c,r) + i*13;
+        const x1 = cx+s0*Math.cos(a1), y1 = cy+s0*Math.sin(a1), x2 = cx+s0*Math.cos(a2), y2 = cy+s0*Math.sin(a2);
+        const mx = (x1+x2)/2 + wob(sd)*S*.12, my = (y1+y2)/2 + wob(sd+3)*S*.12;
+        ctx.lineWidth = Math.max(1.6*lw, S*.085);
+        ctx.beginPath(); ctx.moveTo(x1 + wob(sd+1)*S*.05, y1 + wob(sd+2)*S*.05); ctx.quadraticCurveTo(mx, my, x2, y2); ctx.stroke();
+        if (px > 20){ ctx.lineWidth = Math.max(lw, S*.035); ctx.beginPath(); ctx.moveTo(x1, y1); ctx.quadraticCurveTo(mx + wob(sd+5)*S*.1, my + wob(sd+7)*S*.1, x2 + wob(sd+9)*S*.05, y2); ctx.stroke(); }
+      }
+    }
   }
   // peoples: tint + border where the neighbor differs
   for (const [c,r,cx,cy,d] of cells){
@@ -521,13 +562,14 @@ function paint(){
       ctx.strokeStyle = pass ? RIVER_BLUE : "rgba(10,20,40,.55)"; ctx.lineWidth = pass ? Math.max(2*lw, S*.2) : Math.max(3.5*lw, S*.32);
       ctx.beginPath();
       if (!links.length){ ctx.moveTo(cx-S*.6,cy+S*.35); ctx.bezierCurveTo(cx-S*.2,cy-S*.5,cx+S*.2,cy+S*.5,cx+S*.6,cy-S*.35); }
-      for (const [nx,ny] of links){ ctx.moveTo(cx,cy); ctx.lineTo((cx+nx)/2,(cy+ny)/2); }
+      for (const [nx,ny] of links){ const ex = (cx+nx)/2, ey = (cy+ny)/2, sd = cx*3.1 + cy*7.7 + nx;   // a wandering stroke, not a ruler line
+        ctx.moveTo(cx,cy); ctx.quadraticCurveTo((cx+ex)/2 + wob(sd)*S*.35, (cy+ey)/2 + wob(sd+1)*S*.35, ex, ey); }
       ctx.stroke();
     }
   }
   // natures and markers
   for (const [c,r,cx,cy,d,L] of cells){
-    const nat = d.n || [], ink = L ? inkFor(L.color) : fg;
+    const nat = d.n || [], ink = L ? inkFor(washOf(L.color)) : fg;
     if (nat.length){
       if (px >= 40){ ctx.fillStyle = ink; ctx.font = `700 ${S*.34}px "Atkinson Hyperlegible", sans-serif`; ctx.textAlign="center"; ctx.textBaseline="middle";
         ctx.fillText(nat.slice(0,2).map(n=>n.slice(0,3)).join(" ") + (nat.length>2?" +":""), cx, cy+S*.48); }
