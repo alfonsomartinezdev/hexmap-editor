@@ -278,6 +278,13 @@ const GLYPHS = [["waves","Waves"],["ripple","Ripple"],["grass","Grass"],["canopy
   ["hill","Hill"],["peak","Peak"],["dots","Sand"],["dash","Frost"],["flake","Flake"],["cone","Volcano"]];
 const LAND_COLORS = [["Deep blue","#2f5d86"],["Blue","#4a8cbc"],["Teal","#2f8a7e"],["Green","#4a7a45"],["Dark green","#2d6a4f"],["Olive","#61714d"],
   ["Sage","#a9bb6c"],["Sand","#dcc58a"],["Ochre","#b09a63"],["Stone","#82796e"],["Rust","#7a3b33"],["Frost","#b8c4ba"],["Snow","#e3edf3"],["Ash","#4b4f58"],["Violet","#6e5a8f"],["Rose","#b5677a"]];
+// each land color comes with its own pen stroke, so picking a color picks the hatching too
+const PENS = ["lines","back","cross","dots","waves","dashes"];
+const COLOR_PEN = {"#2f5d86":"waves","#4a8cbc":"waves","#2f8a7e":"dashes","#4a7a45":"lines","#2d6a4f":"cross","#61714d":"dashes",
+  "#a9bb6c":"lines","#dcc58a":"dots","#b09a63":"back","#82796e":"cross","#7a3b33":"dots","#b8c4ba":"dashes","#e3edf3":"dots",
+  "#4b4f58":"cross","#6e5a8f":"waves","#b5677a":"back"};
+function penOf(color){ const c = (color||"").toLowerCase(); if (COLOR_PEN[c]) return COLOR_PEN[c];
+  let h = 0; for (const ch of c) h = (h*31 + ch.charCodeAt(0)) >>> 0; return PENS[h % PENS.length]; }
 const RIVER_BLUE = "#3f8fd0";
 const NATURES = [
   ["Baneful","Something in this land does harm to whatever stays"],["Burning","Something in this land is on fire"],
@@ -434,28 +441,44 @@ function roughHex(cx,cy,s,seed,amt){
 const seedOf = (c,r) => c*92.7 + r*37.3;
 function lum(hex){ const n=parseInt(hex.slice(1),16); return (0.299*(n>>16)+0.587*((n>>8)&255)+0.114*(n&255))/255; }
 const inkFor = color => lum(color) < 0.55 ? "rgba(255,255,255,.85)" : "rgba(20,24,34,.75)";
-/* ---- marker-on-paper land: a light wash with hatching on top, the same for every terrain ---- */
+/* ---- marker-on-paper land: a light wash with hatching on top; the pen stroke comes from the color, never the terrain ---- */
 function hexToRgb(h){ const n = parseInt(h.slice(1),16); return [n>>16, (n>>8)&255, n&255]; }
 function mixHex(a, b, t){ const A = hexToRgb(a), B = hexToRgb(b); return "#" + A.map((v,i) => Math.round(v*(1-t) + B[i]*t).toString(16).padStart(2,"0")).join(""); }
 const patCache = new Map();
 function washOf(color){ return isDark() ? mixHex(color, "#1d2220", .35) : mixHex(color, "#f1f0ea", .45); }
+// one 120px seamless tile per color: a wash of the color with that color's pen strokes on top
+const tileCache = new Map();
+function hatchTile(color){
+  const key = color + "|" + (isDark() ? "d" : "l");
+  if (tileCache.has(key)) return tileCache.get(key);
+  const N = 120, cv = document.createElement("canvas"); cv.width = cv.height = N;
+  const c = cv.getContext("2d"), pen = penOf(color);
+  c.fillStyle = washOf(color); c.fillRect(0,0,N,N);
+  c.strokeStyle = c.fillStyle = isDark() ? mixHex(color, "#f3f0e6", .22) : mixHex(color, "#141414", .22);
+  c.lineCap = "round"; c.lineWidth = 4.2; c.globalAlpha = .9;
+  const diag = (dir, alpha) => { c.globalAlpha = alpha;                        // lines N apart share a wobble so the tile repeats
+    for (let k = 0, i = -N; i < 2*N; i += 15, k++){ const j = wob(k % 8 + dir) * 3; c.beginPath();
+      if (dir > 0){ c.moveTo(i, 0); c.quadraticCurveTo(i + N/2 + j, N/2 - j, i + N, N); }
+      else { c.moveTo(i, N); c.quadraticCurveTo(i + N/2 + j, N/2 + j, i + N, 0); }
+      c.stroke(); } };
+  if (pen === "lines") diag(1, .9);
+  else if (pen === "back") diag(-1, .9);
+  else if (pen === "cross"){ diag(1, .9); diag(-1, .5); }
+  else if (pen === "dots"){ for (let y = 7.5; y < N; y += 15) for (let x = ((y-7.5)/15 % 2) * 7.5 + 3.75; x < N; x += 15){ c.beginPath(); c.arc(x + wob(x*7+y)*2.5, y + wob(x+y*3)*2.5, 2.4, 0, Math.PI*2); c.fill(); } }
+  else if (pen === "waves"){ for (let y = 10; y < N; y += 20){ c.beginPath(); for (let x = 0; x <= N; x += 2) c.lineTo(x, y + Math.sin(x/N*Math.PI*4)*4); c.stroke(); } }
+  else { for (let y = 7.5, row = 0; y < N; y += 15, row++) for (let x = (row % 2) * 12; x < N + 12; x += 24){ c.beginPath(); c.moveTo(x, y + wob(x+y)*2); c.lineTo(x + 12, y + wob(x*3+y)*2); c.stroke(); } }
+  tileCache.size > 60 && tileCache.clear(); tileCache.set(key, cv); return cv;
+}
 function landFill(L){
-  // one treatment for every land, built-in or custom: a wash of its own color with loose diagonal marker strokes
   const key = L.color + "|" + (isDark() ? "d" : "l");
   if (patCache.has(key)) return patCache.get(key);
-  const N = 120, cv = document.createElement("canvas"); cv.width = cv.height = N;
-  const c = cv.getContext("2d");
-  c.fillStyle = washOf(L.color); c.fillRect(0,0,N,N);
-  c.strokeStyle = isDark() ? mixHex(L.color, "#f3f0e6", .22) : mixHex(L.color, "#141414", .22);
-  c.lineCap = "round"; c.lineWidth = 4.2; c.globalAlpha = .9;
-  for (let k = 0, i = -N; i < 2*N; i += 15, k++){                    // lines N apart share a wobble so the tile repeats seamlessly
-    const j = wob(k % 8) * 3;
-    c.beginPath(); c.moveTo(i, 0); c.quadraticCurveTo(i + N/2 + j, N/2 - j, i + N, N); c.stroke();
-  }
-  const pat = ctx.createPattern(cv, "repeat");
-  pat.setTransform(new DOMMatrix().scale(15 / N));                  // one tile = 15 map units, about one hex
+  const pat = ctx.createPattern(hatchTile(L.color), "repeat");
+  pat.setTransform(new DOMMatrix().scale(15 / 120));                // one tile = 15 map units, about one hex
   patCache.set(key, pat); return pat;
 }
+// the same hatching for the little tiles in menus and pickers
+function hatchOn(c2, color, d){ const pat = c2.createPattern(hatchTile(color), "repeat"); pat.setTransform(new DOMMatrix().scale(d / 120)); c2.fillStyle = pat; c2.fillRect(0,0,d,d); }
+const hatchURL = color => { const t = hatchTile(color); return t._url || (t._url = t.toDataURL()); };
 
 function glyph(g, cx, cy, s, ink, label, c2){
   const C = c2 || ctx;
@@ -840,8 +863,8 @@ function el(tag, attrs={}, ...kids){
 function landIcon(t){
   const L = landInfo(t), cv = document.createElement("canvas"), d = 56; cv.width = d; cv.height = d;
   cv.style.cssText = "width:28px;height:28px;flex:0 0 28px;display:block";
-  const c2 = cv.getContext("2d"); c2.fillStyle = L.color; c2.fillRect(0,0,d,d);
-  glyph(L.glyph, d/2, d/2, d*.55, inkFor(L.color), L.name, c2); cv.setAttribute("aria-hidden","true"); return cv;
+  const c2 = cv.getContext("2d"); hatchOn(c2, L.color, d);
+  glyph(L.glyph, d/2, d/2, d*.55, css("--line"), L.name, c2); cv.setAttribute("aria-hidden","true"); return cv;
 }
 const swatch = color => el("span",{class:"sw", style:`background:${color}`, "aria-hidden":"true"});
 function markerIcon(k, color, px = 28){
@@ -965,7 +988,7 @@ function otherForm(label, withColor, onAdd){
 function glyphTile(g, color, px){
   const cv = document.createElement("canvas"), d = 64; cv.width = d; cv.height = d; cv.setAttribute("aria-hidden","true");
   cv.style.cssText = `width:${px}px;height:${px}px;display:block;border-radius:8px`;
-  const c2 = cv.getContext("2d"); c2.fillStyle = color; c2.fillRect(0,0,d,d); glyph(g, d/2, d/2, d*.55, inkFor(color), "?", c2);
+  const c2 = cv.getContext("2d"); hatchOn(c2, color, d); glyph(g, d/2, d/2, d*.55, css("--line"), "?", c2);
   return cv;
 }
 function landForm(ids){
@@ -979,7 +1002,7 @@ function landForm(ids){
   const gbox = el("div",{class:"swatches", role:"group", "aria-label":"Symbol"});
   const paintGlyphs = () => { gbox.textContent = ""; for (const [g,name] of GLYPHS){ const b = el("button",{type:"button", class:"swb", style:"border-radius:10px;overflow:hidden", "aria-label":name, "aria-pressed":String(st.glyph===g)}, glyphTile(g, st.color, 40)); b.onclick = () => { st.glyph = g; paintGlyphs(); paintPreview(); }; gbox.append(b); } };
   const cbox = el("div",{class:"swatches", role:"group", "aria-label":"Color"});
-  const paintColors = () => { cbox.textContent = ""; for (const [name,hex] of LAND_COLORS){ const b = el("button",{type:"button", class:"swb", style:`background:${hex}`, "aria-label":name, "aria-pressed":String(st.color===hex)}); b.onclick = () => { st.color = hex; paintColors(); paintGlyphs(); paintPreview(); }; cbox.append(b); } };
+  const paintColors = () => { cbox.textContent = ""; for (const [name,hex] of LAND_COLORS){ const b = el("button",{type:"button", class:"swb", style:`background:${hex} url(${hatchURL(hex)}) 0 0/100% 100%`, "aria-label":name, "aria-pressed":String(st.color===hex)}); b.onclick = () => { st.color = hex; paintColors(); paintGlyphs(); paintPreview(); }; cbox.append(b); } };
   const input = el("input",{id:"landName", placeholder:"Name, such as Salt flat", autocomplete:"off"}); input.value = st.name;
   input.oninput = () => { st.name = input.value; paintPreview(); };
   paintPreview(); paintGlyphs(); paintColors();
