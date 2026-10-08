@@ -94,7 +94,7 @@ test.describe("publishing", () => {
 
   test("changing the age is shared", async ({ app }) => {
     await app.page.locator("#menuBtn").click();
-    await app.page.locator("#mBody button.link", { hasText: "Age and map size" }).click();
+    await app.page.locator("#mBody button.link", { hasText: /^Age/ }).click();
     await app.page.getByRole("button", { name: "Second Age" }).click();
     await expect(app.page.locator("#ageLabel")).toHaveText("Second Age · area 7");
     // the age travels as a small post, so history shows when the world moved on

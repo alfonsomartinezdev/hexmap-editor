@@ -94,7 +94,7 @@ test("another player's new land shows up for everyone", async ({ app }) => {
 test("changing the age publishes a small post that shows in history", async ({ app }) => {
   await app.page.evaluate(() => localStorage.setItem("soc-name", "Ash"));
   await app.page.locator("#menuBtn").click();
-  await app.page.locator("#mBody button.link", { hasText: "Age and map size" }).click();
+  await app.page.locator("#mBody button.link", { hasText: /^Age/ }).click();
   await app.page.getByRole("button", { name: "Second Age" }).click();
   await expect.poll(async () => (await writes(app)).map(w => w.body.world)).toEqual([expect.objectContaining({ age: 2 })]);
   await expect(app.page.locator("#ageLabel")).toHaveText("Second Age · area 7");

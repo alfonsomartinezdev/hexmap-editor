@@ -1037,14 +1037,7 @@ $("histBack").onclick = () => showHistory(null);
 function openWorld(){
   const segs = el("div",{class:"segs"});
   for (const a of [1,2,3]) segs.append(el("button",{type:"button", class:"btn", "aria-pressed":String(age===a), disabled: !canWrite || null, onclick: async ()=>{ age=a; renderAge(); closeModal(); await publishWorld({age, cols:COLS, rows:ROWS}); }}, AGES[a][0]));
-  let cols = COLS, rows = ROWS;
-  const ci = el("input",{id:"cols", type:"number", min:"4", max:"80", value:String(COLS), inputmode:"numeric"}); ci.oninput = () => cols = +ci.value;
-  const ri = el("input",{id:"rows", type:"number", min:"4", max:"120", value:String(ROWS), inputmode:"numeric"}); ri.oninput = () => rows = +ri.value;
-  const size = el("form",{class:"form", onsubmit: async (e)=>{ e.preventDefault(); if (!(cols>=4 && cols<=80 && rows>=4 && rows<=120)) { toast("Use 4 to 80 across and 4 to 120 down."); return; } COLS=cols; ROWS=rows; fit(); closeModal(); await publishWorld({age, cols, rows}); }},
-    el("label",{for:"cols"},"Hexes across"), ci, el("label",{for:"rows"},"Hexes down"), ri,
-    el("p",{class:"note"},"The default is 32 across and 53 down. Shrinking hides hexes outside the new edge; it doesn't erase them."),
-    canWrite ? el("div",{class:"row"}, el("button",{type:"submit", class:"btn primary"},"Change size")) : null);
-  openModal("The world", [el("p",{class:"sub"},"Current age"), segs, el("p",{class:"note"}, `In the ${AGES[age][0].toLowerCase()}, one area is ${AGES[age][1]} ${AGES[age][1]===1?"hex":"hexes"}.`), el("p",{class:"sub"},"Map size"), size]);
+  openModal("Age", [segs, el("p",{class:"note"}, `In the ${AGES[age][0].toLowerCase()}, one area is ${AGES[age][1]} ${AGES[age][1]===1?"hex":"hexes"}.`)]);
 };
 function renderAge(){ $("ageLabel").textContent = `${AGES[age][0]} · area ${AGES[age][1]}`; }
 $("menuBtn").onclick = () => {
@@ -1053,7 +1046,7 @@ $("menuBtn").onclick = () => {
   openModal("Menu", [
     item("History", posts.length ? `${posts.length} published ${posts.length===1?"post":"posts"}` : "No posts yet", openHistory),
     item("Key", "What the colors and symbols mean", openKey),
-    item("Age and map size", `${AGES[age][0]} · ${COLS} × ${ROWS} hexes`, openWorld),
+    item("Age", `${AGES[age][0]} · one area is ${AGES[age][1]} ${AGES[age][1]===1?"hex":"hexes"}`, openWorld),
     backend && backend.needsName ? item("Your name", myName() || "Not set yet", () => askName(null)) : null
   ]);
 };

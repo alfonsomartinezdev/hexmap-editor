@@ -51,11 +51,15 @@ test("controls are at least 44 pixels for thumbs", async ({ app }) => {
   expect(small).toEqual([]);
 });
 
-test("the menu holds History, Key, and Age and map size", async ({ app }) => {
+test("the menu holds History, Key and Age, with no map-size control", async ({ app }) => {
   await app.open();
   await app.page.locator("#menuBtn").click();
   const items = await app.page.locator("#mBody button.link strong").allTextContents();
-  expect(items).toEqual(["History", "Key", "Age and map size"]);
+  expect(items).toEqual(["History", "Key", "Age"]);
+  await app.page.locator("#mBody button.link", { hasText: /^Age/ }).click();
+  await expect(app.page.locator("#cols, #rows")).toHaveCount(0);
+  await app.page.getByRole("button", { name: "Close" }).click();
+  await app.page.locator("#menuBtn").click();
   await app.page.locator("#mBody button.link", { hasText: "Key" }).click();
   await expect(app.page.locator("#mBody")).toContainText("Markers have no set meaning");
   await app.page.getByRole("button", { name: "Close" }).click();
