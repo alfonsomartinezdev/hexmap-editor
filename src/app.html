@@ -17,15 +17,12 @@
   --f-display:"Gaegu", "Comic Neue", "Chalkboard SE", "Marker Felt", cursive;
   --f-body:"Atkinson Hyperlegible", system-ui, -apple-system, "Segoe UI", sans-serif;
   --f-mono:"Space Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
-  --wobble:14px 5px 12px 6px / 6px 12px 5px 14px;
+  --wobble:14px 5px 12px 6px / 6px 12px 5px 14px; color-scheme:light;
 }
-@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+/* the app owns its theme: light unless the player switches dark mode on (data-mode), whatever the
+   phone or the page around it prefers */
+:root[data-mode="dark"]{
   /* chalk on a slate board */
-  --bg:#1d2220; --surface:#252b28; --raise:#2e3531; --fg:#f3f0e6; --muted:#bfc3b9;
-  --line:#f3f0e6; --accent:#ffd93b; --accent-ink:#141414; --accent-line:#ffd93b; --sel:rgba(255,217,59,.32);
-  --void:#171b19; --unmade:#2a302d; --grid:#56605a; --draft:#ff8a5c; --danger:#ff8a78; color-scheme:dark;
-}}
-:root[data-theme="dark"]{
   --bg:#1d2220; --surface:#252b28; --raise:#2e3531; --fg:#f3f0e6; --muted:#bfc3b9;
   --line:#f3f0e6; --accent:#ffd93b; --accent-ink:#141414; --accent-line:#ffd93b; --sel:rgba(255,217,59,.32);
   --void:#171b19; --unmade:#2a302d; --grid:#56605a; --draft:#ff8a5c; --danger:#ff8a78; color-scheme:dark;
@@ -1264,15 +1261,15 @@ $("showOff").onclick = () => setHighlight(null);
 /* light / dark: light unless the player turns dark mode on; the choice lives in a cookie for a year */
 function readThemeCookie(){ try { const m = document.cookie.match(/(?:^|;\s*)soc-theme=(light|dark)/); return m ? m[1] : null; } catch(e){ return null; } }
 function writeThemeCookie(t){ try { document.cookie = `soc-theme=${t}; max-age=31536000; path=/; SameSite=Lax`; } catch(e){} }
-const isDark = () => document.documentElement.dataset.theme === "dark";
-function setTheme(t){ document.documentElement.dataset.theme = t; writeThemeCookie(t); lsSet("soc-theme", t); }  // storage is a fallback where cookies are blocked
+const isDark = () => document.documentElement.dataset.mode === "dark";
+function setTheme(t){ document.documentElement.dataset.mode = t; writeThemeCookie(t); lsSet("soc-theme", t); }  // storage is a fallback where cookies are blocked
 function themeToggle(){
   const b = el("button",{type:"button", class:"themetoggle", role:"switch", "aria-checked":String(isDark())},
     el("span",{class:"tlabel"}, "Dark mode"), el("span",{class:"track","aria-hidden":"true"}, el("span",{class:"knob"})));
   b.onclick = () => { setTheme(isDark() ? "light" : "dark"); b.setAttribute("aria-checked", String(isDark())); };
   return b;
 }
-{ const t = readThemeCookie() || lsGet("soc-theme"); document.documentElement.dataset.theme = t === "dark" ? "dark" : "light"; }
+{ const t = readThemeCookie() || lsGet("soc-theme"); document.documentElement.dataset.mode = t === "dark" ? "dark" : "light"; }
 function renderAge(){
   // "First Age" in marker, "area 19" typed underneath; reads as one phrase to screen readers
   const l = $("ageLabel"); l.textContent = "";
@@ -1307,8 +1304,7 @@ window.__hexScreen = (c,r) => { const [x,y] = center(c,r); const b = canvas.getB
 /* ================= boot ================= */
 loadDraftLocal(); renderAge(); renderDraftBar(); renderSheet();
 new ResizeObserver(resize).observe(stage);
-matchMedia("(prefers-color-scheme: dark)").addEventListener?.("change", draw);
-new MutationObserver(draw).observe(document.documentElement, {attributes:true, attributeFilter:["data-theme"]});
+new MutationObserver(draw).observe(document.documentElement, {attributes:true, attributeFilter:["data-mode"]});
 
 // every backend does two things: stream all posts, and add one
 function onPosts(list){
