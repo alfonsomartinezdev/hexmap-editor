@@ -54,7 +54,7 @@ const test = base.extend({
         if (await app.heading().textContent() !== "Land") await app.row("Land").click();
         await app.button(name).click();
       },
-      async done() { await app.footer("Clear selection").click(); await app.settle(); }
+      async done() { await app.footer("Done").click(); await app.settle(); }
     };
     await use(app);
     expect(errors, "the page threw errors").toEqual([]);

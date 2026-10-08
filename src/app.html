@@ -69,6 +69,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;-webkit-touch-call
 .stepper{display:flex;align-items:center;gap:2px;border:1px solid var(--line);border-radius:12px;background:var(--raise)}
 .step{min-width:44px;min-height:44px;border:0;background:none;font-size:1.4rem;font-weight:700;cursor:pointer;border-radius:12px}
 .step:disabled{opacity:.35;cursor:default}
+.step.deselect{border:1px solid var(--line);background:var(--raise);font-size:1.05rem;flex:0 0 44px}
 .count{font-weight:700;font-size:.95rem;white-space:nowrap;padding:0 4px;font-variant-numeric:tabular-nums}
 .sheet > .shead{position:sticky;top:-12px;z-index:2;background:var(--surface);margin:-12px -16px 0;padding:12px 16px 8px}
 .shead h2{margin:0;font-size:1.05rem;flex:1;min-width:0;overflow-wrap:anywhere}
@@ -578,12 +579,14 @@ function tap(sx, sy){
 }
 let reveal = null;
 function needsLand(ids){ return ids.length > 0 && ids.some(id => !(view(id)||{}).t); }
-let adding = false;   // after a hold or Grow, taps add and remove instead of switching
+let adding = false;
+let regrouping = false;   // "deselect all" was tapped: the sheet stays open and taps build a new group   // after a hold or Grow, taps add and remove instead of switching
 function selectHex(id, add){
   if (add || adding){
     adding = true;
     if (selection.has(id)) selection.delete(id); else selection.add(id);
-    if (!selection.size) adding = false;
+    if (selection.size) regrouping = false;
+    else if (!regrouping) adding = false;
   } else if (selection.size === 1 && selection.has(id)){
     selection.clear();
   } else { selection.clear(); selection.add(id); growStack.length = 0; }
@@ -684,7 +687,11 @@ function colorPicker(current, onPick){
 
 /* ================= bottom sheet ================= */
 const sheet = $("sheet");
-function clearSelection(){ reveal = null; adding = false; growStack.length = 0; selection.clear(); sheetCat = null; sheetForm = null; moveState = null; renderSheet(); draw(); }
+function deselectAll(){
+  selection.clear(); growStack.length = 0; adding = true; regrouping = true; reveal = null;
+  sheetCat = null; sheetForm = null; renderSheet(); draw(); say("Selection cleared. Tap hexes to select a new group.");
+}
+function clearSelection(){ reveal = null; adding = false; regrouping = false; growStack.length = 0; selection.clear(); sheetCat = null; sheetForm = null; moveState = null; renderSheet(); draw(); }
 function renderSheet(){
   fillSheet();
   if (!sheet.hidden && !moveState){
@@ -697,18 +704,23 @@ function renderSheet(){
       el("button",{type:"button", class:"btn primary", onclick:()=>form.requestSubmit()}, form.dataset.label)));
     else sheet.append(el("div",{class:"sfoot"},
       canWrite ? el("button",{type:"button", class:"btn", disabled: !undoStack.length || null, onclick:undo}, "Undo") : null,
-      el("span",{class:"what"}, adding ? `${n} ${n===1?"hex":"hexes"} · tap to add or remove` : n === 1 ? "Hold another hex to add it" : `${n} hexes selected`),
-      el("button",{type:"button", class:"btn primary", onclick:clearSelection}, "Clear selection")));
+      el("span",{class:"what"}, !n ? "No hexes selected" : adding ? `${n} ${n===1?"hex":"hexes"} · tap to add or remove` : n === 1 ? "Hold another hex to add it" : `${n} hexes selected`),
+      el("button",{type:"button", class:"btn primary", onclick:clearSelection}, "Done")));
   }
   renderDraftBar(); updateHint();
 }
 const colorName = hex => (PALETTE.find(p => p[1]===hex) || ["Custom"])[0];
 const markerName = m => `${colorName(m.color)} ${(MARKERS[m.k]?.[0]||"marker").toLowerCase()}`;
 function fillSheet(){
-  const show = selection.size > 0 && histIdx === null;
+  const show = (selection.size > 0 || regrouping) && histIdx === null;
   sheet.hidden = !show;
   sheet.textContent = "";
   if (!show) return;
+  if (!selection.size){   // waiting for a new group after "deselect all"
+    sheet.append(el("div",{class:"shead"}, el("h2",{}, "Select hexes")),
+      el("p",{class:"note"}, "Tap hexes to select a new group. Tap one again to drop it."));
+    return;
+  }
   const ids = [...selection], n = ids.length;
   if (sheetCat === "Markers" && n > 1){ sheetCat = null; sheetForm = null; }
   if (moveState){
@@ -723,9 +735,11 @@ function fillSheet(){
       count,
       el("button",{type:"button", class:"step", "aria-label":`Grow the selection by ${ringCount()} surrounding hexes`, disabled: !ringCount() || null, onclick:grow}, "+"))
     : count;
+  // with several hexes, a quick way to let go of them all and pick again
+  const reset = n > 1 && !sheetForm ? el("button",{type:"button", class:"step deselect", "aria-label":`Deselect all ${n} hexes`, onclick:deselectAll}, "✕") : null;
   sheet.append(el("div",{class:"shead"},
     sheetCat ? el("button",{type:"button", class:"btn quiet", onclick:()=>{ sheetCat=null; sheetForm=null; renderSheet(); }}, "‹ Back") : null,
-    el("h2",{}, sheetCat || "Selected"), stepper));
+    el("h2",{}, sheetCat || "Selected"), stepper, reset));
   if (!sheetCat){ sheet.append(rowsFor(ids)); if (!canWrite) sheet.append(el("p",{class:"note"}, "You can view this map but not change it.")); return; }
   if (sheetCat === "Land") landOptions(ids);
   else if (sheetCat === "Natures") natureOptions(ids);
@@ -915,7 +929,7 @@ function moveMarkerTo(to){
 let confirmDiscard = false;
 function renderDraftBar(){
   const bar = $("draftBar"), n = draft.size;
-  bar.hidden = !n || histIdx !== null || selection.size > 0; bar.textContent = "";
+  bar.hidden = !n || histIdx !== null || selection.size > 0 || regrouping; bar.textContent = "";
   if (!n) { confirmDiscard = false; return; }
   if (confirmDiscard){
     bar.append(el("span",{class:"what"}, `Start over? This clears your ${n} ${n===1?"change":"changes"}.`),

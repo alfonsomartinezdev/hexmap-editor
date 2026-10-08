@@ -4,10 +4,10 @@ const { test, expect } = require("./support/fixtures");
 test.describe("drafts", () => {
   test.beforeEach(async ({ app }) => { await app.open(); await app.zoomIn(); });
 
-  test("while hexes are selected the bottom offers Clear selection, not Publish", async ({ app }) => {
+  test("while hexes are selected the bottom offers Done, not Publish", async ({ app }) => {
     await app.setLand(16, 26, "Forest");
     await expect(app.page.locator("#draftBar")).toBeHidden();
-    await expect(app.footer("Clear selection")).toBeVisible();
+    await expect(app.footer("Done")).toBeVisible();
     await app.done();
     const bar = app.page.locator("#draftBar");
     await expect(bar).toContainText("1 hex changed · not published yet");

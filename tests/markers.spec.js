@@ -37,7 +37,7 @@ test("the color step fits on a phone: small preview, colors on screen, no Done",
   for (const box of await icons.evaluateAll(els => els.map(e => e.getBoundingClientRect().width))) expect(box).toBeLessThanOrEqual(64);
   const last = await app.page.getByRole("button", { name: "Bone star" }).boundingBox();
   expect(last.y + last.height).toBeLessThanOrEqual(760);
-  await expect(app.footer("Clear selection")).toHaveCount(0);
+  await expect(app.footer("Done")).toHaveCount(0);
   await app.footer("Cancel").click();
   await expect(app.page.getByRole("button", { name: "Star", exact: true })).toBeVisible();
 });

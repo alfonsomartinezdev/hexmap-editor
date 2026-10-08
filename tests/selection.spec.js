@@ -83,12 +83,30 @@ test("arrow keys, Enter and Space select from the keyboard", async ({ app }) => 
   expect((await app.state()).selection).toEqual([]);
 });
 
-test("Clear selection lets go of every selected hex at once", async ({ app }) => {
+test("with several hexes, ✕ deselects them all and the next taps build a new group", async ({ app }) => {
   await app.zoomIn();
   await app.tapHex(16, 26);
+  const reset = app.page.getByRole("button", { name: /^Deselect all/ });
+  await expect(reset).toHaveCount(0);                 // not shown for a single hex
   await app.page.getByRole("button", { name: /^Grow the selection/ }).click();
   expect((await app.state()).selection).toHaveLength(7);
-  await app.footer("Clear selection").click();
+  await reset.click();
+  expect((await app.state()).selection).toEqual([]);
+  await expect(app.sheet()).toBeVisible();
+  await expect(app.heading()).toHaveText("Select hexes");
+  await expect(app.page.locator("#draftBar")).toBeHidden();
+  await app.tapHex(20, 26);
+  await app.tapHex(19, 28);                           // adds, does not switch
+  expect((await app.state()).selection.sort()).toEqual(["h19_28", "h20_26"]);
+  await app.done();
   expect((await app.state()).selection).toEqual([]);
   await expect(app.sheet()).toBeHidden();
+});
+
+test("Done keeps the edits and closes the sheet", async ({ app }) => {
+  await app.zoomIn();
+  await app.setLand(16, 26, "Forest");
+  await app.done();
+  await expect(app.sheet()).toBeHidden();
+  expect((await app.view("h16_26")).t).toBe("forest");
 });
