@@ -197,6 +197,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;-webkit-touch-call
   background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='8' viewBox='0 0 24 8'%3E%3Cpath d='M0 5 Q6 0 12 5 T24 5' fill='none' stroke='%23ffd93b' stroke-width='3.2' stroke-linecap='round'/%3E%3C/svg%3E") left bottom / 24px 8px repeat-x;
   background-size:24px 8px;background-repeat:repeat-x;max-width:max-content;flex:1 1 auto}
 .mhead{border-bottom:2.5px solid var(--line)}
+.mhead .btn{margin-left:auto}
 .rules h2,.rules h3{font-family:var(--f-display);font-weight:700}
 .rules h3{font-size:1.75rem;border-top:2.5px dashed var(--line)}
 .rules h4{font-family:var(--f-display);font-size:1.35rem}
@@ -227,6 +228,12 @@ canvas{display:block;width:100%;height:100%;touch-action:none;-webkit-touch-call
 .banner{background:var(--fg);color:var(--bg);border:2.5px solid var(--line);border-radius:var(--wobble);box-shadow:var(--hard)}
 .movebar{border-radius:var(--wobble)}
 :focus-visible{outline:3px dashed var(--accent-line);outline-offset:3px}
+.themetoggle{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;min-height:60px;padding:0 2px;border:0;border-bottom:2px dashed var(--line);background:none;cursor:pointer;font-weight:700}
+.themetoggle .track{width:58px;height:32px;border:2.5px solid var(--line);border-radius:18px 14px 16px 15px;background:var(--raise);box-shadow:var(--hard);position:relative;flex:0 0 58px}
+.themetoggle .knob{position:absolute;top:3px;left:3px;width:21px;height:21px;border-radius:50%;background:var(--line);transition:left .15s ease}
+.themetoggle[aria-checked="true"] .track{background:var(--accent)}
+.themetoggle[aria-checked="true"] .knob{left:28px;background:#141414}
+@media (prefers-reduced-motion:reduce){.themetoggle .knob{transition:none}}
 @media (prefers-reduced-motion:reduce){.btn,.opt,.rowbtn,.cat,.zbtn,.menubtn,.showbtn,.showoff,.chip{transition:none}}
 </style>
 
@@ -1143,7 +1150,7 @@ const modal = $("modal"); let lastFocus = null;
 function openModal(title, body, opts){
   $("hint").hidden = true;
   modal.querySelector(".mpanel").classList.toggle("tall", !!(opts && opts.tall));
-  lastFocus = document.activeElement; $("mTitle").textContent = title; const b = $("mBody"); b.textContent = ""; b.append(...[body].flat());
+  lastFocus = document.activeElement; $("mTitle").textContent = title; const b = $("mBody"); b.textContent = ""; b.append(...[body].flat().filter(x => x != null && x !== false));
   modal.hidden = false; $("mClose").focus();
 }
 function closeModal(){ modal.hidden = true; updateHint(); if (lastFocus && lastFocus.focus) lastFocus.focus(); }
@@ -1254,6 +1261,16 @@ function openRules(){
 }
 $("showBtn").onclick = openShow;
 $("showOff").onclick = () => setHighlight(null);
+/* light / dark: follows the phone until the player picks one, then remembers it on this device */
+const isDark = () => (document.documentElement.dataset.theme || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light")) === "dark";
+function setTheme(t){ document.documentElement.dataset.theme = t; lsSet("soc-theme", t); }
+function themeToggle(){
+  const b = el("button",{type:"button", class:"themetoggle", role:"switch", "aria-checked":String(isDark())},
+    el("span",{class:"tlabel"}, "Dark mode"), el("span",{class:"track","aria-hidden":"true"}, el("span",{class:"knob"})));
+  b.onclick = () => { setTheme(isDark() ? "light" : "dark"); b.setAttribute("aria-checked", String(isDark())); };
+  return b;
+}
+{ const t = lsGet("soc-theme"); if (t === "light" || t === "dark") document.documentElement.dataset.theme = t; }
 function renderAge(){
   // "First Age" in marker, "area 19" typed underneath; reads as one phrase to screen readers
   const l = $("ageLabel"); l.textContent = "";
@@ -1267,7 +1284,8 @@ $("menuBtn").onclick = () => {
     window.RULES_MD ? item("Rules", "How to play Songs of Creation", openRules) : null,
     item("Key", "What the colors and symbols mean", openKey),
     item("Age", `${AGES[age][0]} · one area is ${AGES[age][1]} ${AGES[age][1]===1?"hex":"hexes"}`, openWorld),
-    backend && backend.needsName ? item("Your name", myName() || "Not set yet", () => askName(null)) : null
+    backend && backend.needsName ? item("Your name", myName() || "Not set yet", () => askName(null)) : null,
+    themeToggle()
   ]);
 };
 

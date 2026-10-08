@@ -117,3 +117,27 @@ test("the rules open full screen with jumps to each section", async ({ app }) =>
   await app.page.locator("#menuBtn").click();
   expect((await app.page.locator(".mpanel").boundingBox()).height).toBeLessThan(700);
 });
+
+test("the menu has a dark mode switch that sticks on this device", async ({ app }) => {
+  await app.open();
+  const bg = () => app.page.evaluate(() => getComputedStyle(document.body).backgroundColor);
+  const light = await bg();
+  await app.page.locator("#menuBtn").click();
+  const sw = app.page.getByRole("switch", { name: /Dark mode/ });
+  await expect(sw).toHaveAttribute("aria-checked", "false");
+  await sw.click();
+  await expect(sw).toHaveAttribute("aria-checked", "true");
+  expect(await bg()).not.toBe(light);
+  await app.page.reload(); await app.page.waitForFunction(() => window.__soc);
+  expect(await app.page.evaluate(() => document.documentElement.dataset.theme)).toBe("dark");
+  await app.page.locator("#menuBtn").click();
+  await app.page.getByRole("switch", { name: /Dark mode/ }).click();
+  expect(await bg()).toBe(light);
+});
+
+test("the menu never shows stray text for items it leaves out", async ({ app }) => {
+  // regression: an omitted menu item rendered as the word "null"
+  await app.open();
+  await app.page.locator("#menuBtn").click();
+  await expect(app.page.locator("#mBody")).not.toContainText("null");
+});
