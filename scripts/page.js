@@ -7,6 +7,14 @@ const path = require("path");
 const APP = path.join(__dirname, "..", "src", "app.html");
 
 const CONFIG = path.join(__dirname, "..", "site.config.json");
+const RULES = path.join(__dirname, "..", "rules.md");
+
+// the rules travel inside the page, so they open instantly and work offline
+const rulesScript = () => {
+  if (!fs.existsSync(RULES)) return "";
+  const json = JSON.stringify(fs.readFileSync(RULES, "utf8")).replace(/</g, "\\u003c");
+  return `<script>window.RULES_MD = ${json};</script>\n`;
+};
 
 const wrap = (body, config) => `<!doctype html>
 <html lang="en">
@@ -22,7 +30,7 @@ img{max-width:100%}
 </style>
 </head>
 <body>
-${config ? `<script>window.MAP_CONFIG = ${JSON.stringify(config)};</script>\n` : ""}${body}
+${config ? `<script>window.MAP_CONFIG = ${JSON.stringify(config)};</script>\n` : ""}${rulesScript()}${body}
 </body>
 </html>
 `;

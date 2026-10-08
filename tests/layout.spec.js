@@ -51,11 +51,11 @@ test("controls are at least 44 pixels for thumbs", async ({ app }) => {
   expect(small).toEqual([]);
 });
 
-test("the menu holds History, Key and Age, with no map-size control", async ({ app }) => {
+test("the menu holds History, Rules, Key and Age, with no map-size control", async ({ app }) => {
   await app.open();
   await app.page.locator("#menuBtn").click();
   const items = await app.page.locator("#mBody button.link strong").allTextContents();
-  expect(items).toEqual(["History", "Key", "Age"]);
+  expect(items).toEqual(["History", "Rules", "Key", "Age"]);
   await app.page.locator("#mBody button.link", { hasText: /^Age/ }).click();
   await expect(app.page.locator("#cols, #rows")).toHaveCount(0);
   await app.page.getByRole("button", { name: "Close" }).click();
@@ -95,4 +95,25 @@ test("hex picking matches the hex centers", async ({ app }) => {
     return bad;
   });
   expect(ok).toEqual([]);
+});
+
+test("the rules open full screen with jumps to each section", async ({ app }) => {
+  await app.open();
+  await app.page.locator("#menuBtn").click();
+  await app.page.locator("#mBody button.link", { hasText: "Rules" }).click();
+  await expect(app.page.locator("#mTitle")).toHaveText("Rules");
+  const body = app.page.locator("#mBody .rules");
+  await expect(body.locator("h3").first()).toHaveText("I. Gods");
+  await expect(body.locator("table")).not.toHaveCount(0);
+  // the Table of Powers is wide; it scrolls inside its own box, never the page
+  expect(await noSidewaysScroll(app.page)).toBe(true);
+  const panel = await app.page.locator(".mpanel").boundingBox();
+  expect(panel.height).toBeGreaterThan(700);
+  await app.page.locator(".toc").getByRole("button", { name: "Table of Powers" }).click();
+  await expect(body.locator("#r-table-of-powers")).toBeInViewport();
+  await expect(body).toContainText("Perform Deed: once per round");
+  await app.page.getByRole("button", { name: "Close" }).click();
+  // other dialogs keep their normal height
+  await app.page.locator("#menuBtn").click();
+  expect((await app.page.locator(".mpanel").boundingBox()).height).toBeLessThan(700);
 });
