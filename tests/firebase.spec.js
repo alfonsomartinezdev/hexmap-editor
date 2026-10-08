@@ -56,7 +56,8 @@ test("clearing a field survives the trip through Firebase", async ({ app }) => {
   await expect.poll(async () => (await app.view("h16_26") || {}).t).toBe("forest");
   await app.tapHex(16, 26);
   await app.row("Natures").click();
-  await app.page.getByRole("button", { name: "Remove Deep from selected hexes" }).click();
+  await app.button("Deep").click();
+  await app.button("‹ Back").click();
   await app.row("Land").click();
   await app.button("Clear land").click();
   await app.done();

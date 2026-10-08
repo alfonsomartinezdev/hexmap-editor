@@ -53,20 +53,55 @@ test("river is only offered once a hex has land, and runs over it", async ({ app
   expect(h.r).toBe(true);
 });
 
-test("natures add to what is there instead of replacing it", async ({ app }) => {
+test("natures are a checklist: tap to add several, the screen stays open", async ({ app }) => {
   await app.setLand(16, 26, "Forest");
-  await app.row("Natures").click(); await app.button("Deep").click();
-  await app.row("Natures").click(); await app.button("Wild").click();
+  await app.row("Natures").click();
+  await app.button("Deep").click();
+  await app.button("Wild").click();
+  await expect(app.heading()).toHaveText("Natures");
+  await expect(app.button("Deep")).toHaveAttribute("aria-pressed", "true");
+  await expect(app.button("Burning")).toHaveAttribute("aria-pressed", "false");
   expect((await app.view("h16_26")).n).toEqual(["Deep", "Wild"]);
+  await app.button("‹ Back").click();
   await expect(app.row("Natures")).toContainText("Deep, Wild");
 });
 
-test("a nature can be removed from the selected hexes", async ({ app }) => {
+test("tapping a checked nature removes it", async ({ app }) => {
+  await app.setLand(16, 26, "Forest");
+  await app.row("Natures").click();
+  await app.button("Deep").click();
+  await app.button("Wild").click();
+  await app.button("Deep").click();
+  expect((await app.view("h16_26")).n).toEqual(["Wild"]);
+  await expect(app.button("Deep")).toHaveAttribute("aria-pressed", "false");
+});
+
+test("with several hexes, a nature only some have shows as mixed and a tap gives it to all", async ({ app }) => {
   await app.setLand(16, 26, "Forest");
   await app.row("Natures").click(); await app.button("Deep").click();
+  await app.done();
+  await app.setLand(18, 26, "Forest");
+  await app.done();
+  await app.tapHex(16, 26);
+  await app.holdHex(18, 26);
   await app.row("Natures").click();
-  await app.page.getByRole("button", { name: "Remove Deep from selected hexes" }).click();
+  await expect(app.button("Deep")).toHaveAttribute("aria-pressed", "mixed");
+  await app.button("Deep").click();
+  expect((await app.view("h18_26")).n).toEqual(["Deep"]);
+  await expect(app.button("Deep")).toHaveAttribute("aria-pressed", "true");
+  await app.button("Deep").click();
   expect((await app.view("h16_26")).n || []).toEqual([]);
+  expect((await app.view("h18_26")).n || []).toEqual([]);
+});
+
+test("a new nature is added and checked", async ({ app }) => {
+  await app.setLand(16, 26, "Forest");
+  await app.row("Natures").click();
+  await app.button("New nature…").click();
+  await app.page.fill("#otherName", "Singing");
+  await app.footer("Add").click();
+  await expect(app.button("Singing")).toHaveAttribute("aria-pressed", "true");
+  expect((await app.view("h16_26")).n).toEqual(["Singing"]);
 });
 
 test("choosing land applies to every selected hex", async ({ app }) => {

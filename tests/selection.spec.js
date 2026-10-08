@@ -42,7 +42,7 @@ test("tapping another hex switches to it; tapping the selected hex closes it", a
   await expect(app.sheet()).toBeHidden();
 });
 
-test("holding a hex adds it, and taps then add or remove until Done", async ({ app }) => {
+test("holding a hex adds it, and taps then add or remove until the selection is cleared", async ({ app }) => {
   await app.zoomIn();
   await app.tapHex(16, 26);
   await expect(app.sheet().locator(".sfoot .what")).toHaveText("Hold another hex to add it");
@@ -81,4 +81,14 @@ test("arrow keys, Enter and Space select from the keyboard", async ({ app }) => 
   expect((await app.state()).selection).toHaveLength(2);
   await app.page.keyboard.press("Escape");
   expect((await app.state()).selection).toEqual([]);
+});
+
+test("Clear selection lets go of every selected hex at once", async ({ app }) => {
+  await app.zoomIn();
+  await app.tapHex(16, 26);
+  await app.page.getByRole("button", { name: /^Grow the selection/ }).click();
+  expect((await app.state()).selection).toHaveLength(7);
+  await app.footer("Clear selection").click();
+  expect((await app.state()).selection).toEqual([]);
+  await expect(app.sheet()).toBeHidden();
 });

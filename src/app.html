@@ -70,6 +70,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;-webkit-touch-call
 .step{min-width:44px;min-height:44px;border:0;background:none;font-size:1.4rem;font-weight:700;cursor:pointer;border-radius:12px}
 .step:disabled{opacity:.35;cursor:default}
 .count{font-weight:700;font-size:.95rem;white-space:nowrap;padding:0 4px;font-variant-numeric:tabular-nums}
+.sheet > .shead{position:sticky;top:-12px;z-index:2;background:var(--surface);margin:-12px -16px 0;padding:12px 16px 8px}
 .shead h2{margin:0;font-size:1.05rem;flex:1;min-width:0;overflow-wrap:anywhere}
 .btn{min-height:44px;padding:0 14px;border-radius:10px;border:1px solid var(--line);background:var(--raise);font-weight:700;font-size:.95rem;cursor:pointer}
 .btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
@@ -86,6 +87,10 @@ canvas{display:block;width:100%;height:100%;touch-action:none;-webkit-touch-call
 .opt canvas,.keyrow canvas{width:28px;height:28px;flex:0 0 28px;border-radius:6px}
 .opt .sw,.keyrow .sw{width:22px;height:22px;flex:0 0 22px;border-radius:50%;border:2px solid var(--fg)}
 .opt.other{border-style:dashed;color:var(--muted)}
+.opt.check .tick{width:22px;height:22px;flex:0 0 22px;border-radius:6px;border:2px solid var(--line);display:grid;place-items:center;font-weight:700;font-size:.85rem;line-height:1}
+.opt.check[aria-pressed="true"]{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent);font-weight:700}
+.opt.check[aria-pressed="true"] .tick{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.opt.check[aria-pressed="mixed"] .tick{border-color:var(--accent);color:var(--accent)}
 .sub{font-size:.8rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:0}
 .details{display:flex;flex-direction:column;gap:8px;font-size:.95rem}
 .chips{display:flex;flex-wrap:wrap;gap:6px}
@@ -693,7 +698,7 @@ function renderSheet(){
     else sheet.append(el("div",{class:"sfoot"},
       canWrite ? el("button",{type:"button", class:"btn", disabled: !undoStack.length || null, onclick:undo}, "Undo") : null,
       el("span",{class:"what"}, adding ? `${n} ${n===1?"hex":"hexes"} · tap to add or remove` : n === 1 ? "Hold another hex to add it" : `${n} hexes selected`),
-      el("button",{type:"button", class:"btn primary", onclick:clearSelection}, "Done")));
+      el("button",{type:"button", class:"btn primary", onclick:clearSelection}, "Clear selection")));
   }
   renderDraftBar(); updateHint();
 }
@@ -809,26 +814,27 @@ function landOptions(ids){
   }
 }
 function natureOptions(ids){
+  const has = nm => ids.filter(id => ((view(id)||{}).n || []).includes(nm)).length;
+  const setNature = (nm, on) => {
+    snapshot();
+    for (const id of ids){ const cur = (view(id)||{}).n || []; if (on && !cur.includes(nm)) setField(id,"n",[...cur,nm]); if (!on && cur.includes(nm)) setField(id,"n",cur.filter(x=>x!==nm)); }
+    afterEdit(); say(`${nm} ${on ? "added" : "removed"}.`);
+  };
   if (sheetForm === "other"){
     sheet.append(otherForm("Name of the nature", false, async (nm) => {
-      await addCustom("nature", nm);
-      applyAll(ids, id => { const cur = (view(id)||{}).n || []; if (!cur.includes(nm)) setField(id,"n",[...cur,nm]); }, `Added ${nm}.`);
+      const key = await addCustom("nature", nm); sheetForm = null; setNature(key, true);
     })); return;
   }
-  const o = el("div",{class:"opts"});
+  sheet.append(el("p",{class:"note"}, ids.length > 1 ? "Tap a nature to add it to every selected hex. Tap a checked one to remove it." : "Tap to add a nature. Tap a checked one to remove it."));
+  const o = el("div",{class:"opts natures"});
   const all = [...NATURES.map(x=>[x[0],x[1]]), ...[...customNat].map(n=>[n,"Custom nature"])];
   for (const [nm,desc] of all){
-    o.append(el("button",{type:"button", class:"opt", title:desc, onclick:()=>applyAll(ids, id => { const cur = (view(id)||{}).n || []; if (!cur.includes(nm)) setField(id,"n",[...cur,nm]); }, `Added ${nm} to ${ids.length} ${ids.length===1?"hex":"hexes"}.`)}, nm));
+    const k = has(nm), state = k === 0 ? "false" : k === ids.length ? "true" : "mixed";
+    o.append(el("button",{type:"button", class:"opt check", title:desc, "aria-pressed":state, onclick:()=>setNature(nm, state !== "true")},
+      el("span",{class:"tick","aria-hidden":"true"}, state === "true" ? "✓" : state === "mixed" ? "–" : ""), nm));
   }
-  o.append(el("button",{type:"button", class:"opt other", onclick:()=>{ sheetForm="other"; renderSheet(); }}, "Other…"));
-  sheet.append(el("p",{class:"note"}, "Natures add to what's already there."), o);
-  // natures present across the selection can be removed here too
-  const present = new Set(); for (const id of ids) for (const nm of (view(id)||{}).n || []) present.add(nm);
-  if (present.size){
-    const chips = el("div",{class:"chips"});
-    for (const nm of present) chips.append(el("span",{class:"chip"}, nm, el("button",{type:"button","aria-label":`Remove ${nm} from selected hexes`, onclick:()=>applyAll(ids, id => { const cur=(view(id)||{}).n||[]; if (cur.includes(nm)) setField(id,"n",cur.filter(x=>x!==nm)); }, `Removed ${nm}.`)}, "×")));
-    sheet.append(el("p",{class:"sub"},"Remove from these hexes"), chips);
-  }
+  o.append(el("button",{type:"button", class:"opt other", onclick:()=>{ sheetForm="other"; renderSheet(); }}, "New nature…"));
+  sheet.append(o);
 }
 function peopleOptions(ids){
   if (sheetForm === "other"){
