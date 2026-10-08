@@ -1261,16 +1261,18 @@ function openRules(){
 }
 $("showBtn").onclick = openShow;
 $("showOff").onclick = () => setHighlight(null);
-/* light / dark: follows the phone until the player picks one, then remembers it on this device */
-const isDark = () => (document.documentElement.dataset.theme || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light")) === "dark";
-function setTheme(t){ document.documentElement.dataset.theme = t; lsSet("soc-theme", t); }
+/* light / dark: light unless the player turns dark mode on; the choice lives in a cookie for a year */
+function readThemeCookie(){ try { const m = document.cookie.match(/(?:^|;\s*)soc-theme=(light|dark)/); return m ? m[1] : null; } catch(e){ return null; } }
+function writeThemeCookie(t){ try { document.cookie = `soc-theme=${t}; max-age=31536000; path=/; SameSite=Lax`; } catch(e){} }
+const isDark = () => document.documentElement.dataset.theme === "dark";
+function setTheme(t){ document.documentElement.dataset.theme = t; writeThemeCookie(t); lsSet("soc-theme", t); }  // storage is a fallback where cookies are blocked
 function themeToggle(){
   const b = el("button",{type:"button", class:"themetoggle", role:"switch", "aria-checked":String(isDark())},
     el("span",{class:"tlabel"}, "Dark mode"), el("span",{class:"track","aria-hidden":"true"}, el("span",{class:"knob"})));
   b.onclick = () => { setTheme(isDark() ? "light" : "dark"); b.setAttribute("aria-checked", String(isDark())); };
   return b;
 }
-{ const t = lsGet("soc-theme"); if (t === "light" || t === "dark") document.documentElement.dataset.theme = t; }
+{ const t = readThemeCookie() || lsGet("soc-theme"); document.documentElement.dataset.theme = t === "dark" ? "dark" : "light"; }
 function renderAge(){
   // "First Age" in marker, "area 19" typed underneath; reads as one phrase to screen readers
   const l = $("ageLabel"); l.textContent = "";
