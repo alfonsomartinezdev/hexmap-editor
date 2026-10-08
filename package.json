@@ -1,0 +1,14 @@
+{
+  "name": "songs-of-creation-map",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A shared, phone-first hex map for the Songs of Creation play-by-post game.",
+  "scripts": {
+    "serve": "node tests/support/serve.js",
+    "test": "playwright test",
+    "test:chromium": "SKIP_WEBKIT=1 playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.56.0"
+  }
+}

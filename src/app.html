@@ -1,0 +1,1058 @@
+<title>Songs of Creation World</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IM+Fell+English+SC&family=Atkinson+Hyperlegible:wght@400;700&display=swap">
+<style>
+/* Layout: one-screen phone app. Top bar, map fills the middle, bottom stack (selection sheet, draft bar)
+   sits in the flow so the map never hides behind it. Desktop is the same column, centered and wider. */
+:root{
+  --bg:#e4e8ee; --surface:#f7f8fa; --raise:#ffffff; --fg:#151a24; --muted:#4f596b;
+  --line:#c3cad6; --accent:#2c4a9a; --accent-ink:#ffffff; --sel:rgba(44,74,154,.38);
+  --void:#cfd6e0; --unmade:#eef1f5; --grid:#b4bdcb; --draft:#b4610f; --danger:#a1311f;
+  --shadow:0 -4px 20px rgba(21,26,36,.12);
+  --f-display:"IM Fell English SC", "Iowan Old Style", Georgia, serif;
+  --f-body:"Atkinson Hyperlegible", system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --bg:#0e121d; --surface:#161b28; --raise:#1f2535; --fg:#eceff5; --muted:#a6afc2;
+  --line:#2f3850; --accent:#a9bdf2; --accent-ink:#0e121d; --sel:rgba(169,189,242,.4);
+  --void:#0a0d16; --unmade:#1b2132; --grid:#2c3550; --draft:#f0a35a; --danger:#f08a78;
+  --shadow:0 -4px 20px rgba(0,0,0,.5); color-scheme:dark;
+}}
+:root[data-theme="dark"]{
+  --bg:#0e121d; --surface:#161b28; --raise:#1f2535; --fg:#eceff5; --muted:#a6afc2;
+  --line:#2f3850; --accent:#a9bdf2; --accent-ink:#0e121d; --sel:rgba(169,189,242,.4);
+  --void:#0a0d16; --unmade:#1b2132; --grid:#2c3550; --draft:#f0a35a; --danger:#f08a78;
+  --shadow:0 -4px 20px rgba(0,0,0,.5); color-scheme:dark;
+}
+html,body{height:100%}
+body{background:var(--bg);color:var(--fg);font-family:var(--f-body);font-size:1rem;line-height:1.4;overflow:hidden}
+.app{height:100%;width:100%;display:grid;grid-template-rows:minmax(0,1fr) auto;grid-template-columns:minmax(0,1fr);max-width:760px;margin:0 auto;background:var(--bg);overflow:hidden}
+button{font:inherit;color:inherit}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+
+.top{display:flex;align-items:center;gap:8px;padding:6px 12px;background:var(--surface);border-bottom:1px solid var(--line);min-width:0}
+.top h1{font-family:var(--f-display);font-weight:400;font-size:1.25rem;margin:0;line-height:1;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tbtn{min-height:44px;min-width:44px;padding:0 12px;border-radius:10px;border:1px solid var(--line);background:var(--raise);font-size:.9rem;font-weight:700;cursor:pointer;white-space:nowrap}
+.tbtn.age{font-weight:400;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;text-align:left}
+
+.stage{position:relative;min-height:0;background:var(--void);overflow:hidden}
+canvas{display:block;width:100%;height:100%;touch-action:none;-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}
+.zoom{position:absolute;right:10px;bottom:10px;display:flex;flex-direction:column;gap:8px;align-items:flex-end}
+.selmode{min-height:48px;padding:0 16px;border-radius:24px;border:1px solid var(--line);background:var(--raise);font-weight:700;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.2);white-space:nowrap}
+.selmode[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.zbtn{width:44px;height:44px;border-radius:10px;border:1px solid var(--line);background:var(--raise);font-size:1.3rem;font-weight:700;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.15)}
+.zbtn.small{font-size:.8rem}
+.banner{position:absolute;left:10px;right:10px;top:64px;background:var(--fg);color:var(--bg);border-radius:10px;padding:8px 8px 8px 12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:.9rem}
+.banner span{flex:1;min-width:0}
+.banner button{min-height:40px;padding:0 12px;border-radius:8px;border:0;background:var(--bg);color:var(--fg);font-weight:700;cursor:pointer}
+.toast{position:absolute;left:50%;bottom:12px;transform:translateX(-50%);background:var(--fg);color:var(--bg);padding:10px 14px;border-radius:10px;font-size:.9rem;max-width:calc(100% - 140px);text-align:center;pointer-events:none;transition:opacity .2s}
+
+.menubtn{position:absolute;left:10px;top:10px;min-height:44px;display:flex;align-items:center;gap:10px;padding:0 14px 0 12px;border-radius:12px;border:1px solid var(--line);background:var(--raise);font-size:.9rem;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.15);max-width:calc(100% - 84px)}
+.menubtn span:last-child{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.burger{display:flex;flex-direction:column;gap:3px;flex:0 0 18px}
+.burger i{display:block;height:2px;border-radius:1px;background:currentColor}
+.hint{position:absolute;left:50%;top:42%;transform:translate(-50%,-50%);background:var(--fg);color:var(--bg);padding:12px 18px;border-radius:999px;font-weight:700;pointer-events:none;box-shadow:0 4px 16px rgba(0,0,0,.25);white-space:nowrap}
+.rows{display:flex;flex-direction:column;gap:8px}
+.rowbtn{display:flex;align-items:center;gap:12px;min-height:56px;padding:6px 12px;border-radius:12px;border:1px solid var(--line);background:var(--raise);text-align:left;cursor:pointer;width:100%}
+.rowbtn:disabled{cursor:default;opacity:.55}
+.rowbtn .rl{flex:0 0 7.6em;white-space:nowrap;font-size:.8rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+.rowbtn .rv{flex:1;min-width:0;display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-weight:700}
+.rowbtn .rv canvas{width:26px;height:26px;border-radius:6px;flex:0 0 26px}
+.rowbtn .rv .none{font-weight:400;color:var(--muted)}
+.rowbtn .chev{color:var(--muted);font-size:1.3rem;line-height:1}
+.rowgap{min-height:56px}
+.bottom{min-width:0;display:flex;flex-direction:column;background:var(--surface);border-top:1px solid var(--line);box-shadow:var(--shadow);padding-bottom:env(safe-area-inset-bottom,0px)}
+.sheet{min-width:0;max-height:52vh;overflow-y:auto;padding:12px 16px 0;display:flex;flex-direction:column;gap:12px}
+.shead{display:flex;align-items:center;gap:8px}
+.stepper{display:flex;align-items:center;gap:2px;border:1px solid var(--line);border-radius:12px;background:var(--raise)}
+.step{min-width:44px;min-height:44px;border:0;background:none;font-size:1.4rem;font-weight:700;cursor:pointer;border-radius:12px}
+.step:disabled{opacity:.35;cursor:default}
+.count{font-weight:700;font-size:.95rem;white-space:nowrap;padding:0 4px;font-variant-numeric:tabular-nums}
+.shead h2{margin:0;font-size:1.05rem;flex:1;min-width:0;overflow-wrap:anywhere}
+.btn{min-height:44px;padding:0 14px;border-radius:10px;border:1px solid var(--line);background:var(--raise);font-weight:700;font-size:.95rem;cursor:pointer}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.btn.quiet{border-color:transparent;background:transparent;color:var(--muted)}
+.btn.danger{color:var(--danger)}
+.btn:disabled{opacity:.5;cursor:default}
+.sfoot{position:sticky;bottom:0;margin:0 -16px;padding:10px 16px;background:var(--surface);border-top:1px solid var(--line);display:flex;align-items:center;gap:8px}
+.sfoot .what{flex:1;min-width:0;color:var(--muted);font-size:.9rem}
+.cats{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+@media (min-width:560px){.cats{grid-template-columns:none;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr)}}
+.cat{min-height:52px;border-radius:12px;border:1px solid var(--line);background:var(--raise);font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px}
+.opts{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(140px,100%),1fr));gap:8px}
+.opt{min-height:48px;border-radius:10px;border:1px solid var(--line);background:var(--raise);display:flex;align-items:center;gap:10px;padding:0 10px;cursor:pointer;text-align:left;font-size:.95rem}
+.opt canvas,.keyrow canvas{width:28px;height:28px;flex:0 0 28px;border-radius:6px}
+.opt .sw,.keyrow .sw{width:22px;height:22px;flex:0 0 22px;border-radius:50%;border:2px solid var(--fg)}
+.opt.other{border-style:dashed;color:var(--muted)}
+.sub{font-size:.8rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:0}
+.details{display:flex;flex-direction:column;gap:8px;font-size:.95rem}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{display:inline-flex;align-items:center;gap:4px;min-height:36px;padding:0 4px 0 12px;border-radius:999px;border:1px solid var(--line);background:var(--raise);font-size:.9rem}
+.chip button{min-width:32px;min-height:32px;border:0;background:none;border-radius:50%;cursor:pointer;font-size:1.1rem;color:var(--muted)}
+.mk{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.mk{padding-bottom:10px;border-bottom:1px solid var(--line)}
+.mk .name{flex:1 1 100%;min-width:0;display:flex;align-items:center;gap:8px}
+.form{display:flex;flex-direction:column;gap:10px}
+.form label{font-weight:700;font-size:.9rem}
+.form input{min-height:44px;border-radius:10px;border:1px solid var(--line);background:var(--raise);color:var(--fg);font:inherit;padding:0 12px}
+.swatches{display:flex;flex-wrap:wrap;gap:8px}
+.swb{width:44px;height:44px;border-radius:50%;border:2px solid var(--line);cursor:pointer;padding:0}
+.swb[aria-pressed="true"]{border:3px solid var(--fg);box-shadow:0 0 0 3px var(--surface) inset}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.grow{flex:1}
+.movebar{background:var(--fg);color:var(--bg);border-radius:10px;padding:10px 12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.movebar span{flex:1;min-width:0}
+.movebar button{min-height:40px;padding:0 12px;border-radius:8px;border:0;background:var(--bg);color:var(--fg);font-weight:700;cursor:pointer}
+
+.draftbar{min-width:0;display:flex;align-items:center;gap:8px;padding:10px 16px;border-top:1px solid var(--line);flex-wrap:wrap}
+.draftbar .what{flex:1 1 100%;min-width:0;font-weight:700;font-size:.9rem}
+.draftbar .what small{display:block;font-weight:400;color:var(--muted);font-size:.8rem}
+.dot{display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--draft);margin-right:6px;vertical-align:middle}
+
+.modal{position:fixed;inset:0;background:rgba(10,13,22,.45);display:flex;align-items:flex-end;justify-content:center;z-index:20}
+.mpanel{background:var(--surface);width:100%;max-width:760px;max-height:86%;border-radius:16px 16px 0 0;display:flex;flex-direction:column;padding-bottom:env(safe-area-inset-bottom,0px)}
+.mhead{display:flex;align-items:center;gap:8px;padding:12px 16px;border-bottom:1px solid var(--line)}
+.mhead h2{margin:0;flex:1;font-family:var(--f-display);font-weight:400;font-size:1.3rem}
+.mbody{overflow-y:auto;padding:12px 16px 20px;display:flex;flex-direction:column;gap:14px}
+.keyrow{display:flex;align-items:center;gap:10px;min-height:40px}
+.keylist{display:flex;flex-direction:column;gap:2px}
+.keyrow button{all:unset}
+.link{min-height:44px;display:flex;align-items:center;gap:10px;width:100%;border:0;border-bottom:1px solid var(--line);background:none;text-align:left;cursor:pointer;padding:0 2px}
+.link .when{color:var(--muted);font-size:.85rem;margin-left:auto;white-space:nowrap}
+.empty{color:var(--muted)}
+.segs{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.segs .btn[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.note{color:var(--muted);font-size:.9rem;margin:0}
+@media (prefers-reduced-motion:reduce){.toast{transition:none}}
+</style>
+
+<div class="app">
+  <main class="stage" id="stage">
+    <canvas id="map" tabindex="0" role="application" aria-roledescription="hex map" aria-label="World map. Arrow keys move between hexes. Enter selects a hex, Space adds it to the selection, Escape clears."></canvas>
+    <button class="menubtn" id="menuBtn" aria-haspopup="dialog"><span class="burger" aria-hidden="true"><i></i><i></i><i></i></span><span id="ageLabel">First Age · area 19</span></button>
+    <div class="hint" id="hint" hidden aria-hidden="true"></div>
+    <div class="zoom">
+      <button class="zbtn" id="zin" aria-label="Zoom in">+</button>
+      <button class="zbtn" id="zout" aria-label="Zoom out">−</button>
+      <button class="zbtn small" id="zfit" aria-label="Fit whole map">Fit</button>
+    </div>
+    <div class="banner" id="histBanner" hidden><span id="histText"></span><button id="histBack">Back to now</button></div>
+    <div class="toast" id="toast" style="opacity:0" aria-hidden="true"></div>
+    <div class="sr" id="live" aria-live="polite"></div>
+  </main>
+  <div class="bottom" id="bottom">
+    <section class="sheet" id="sheet" hidden aria-label="Selected hexes"></section>
+    <div class="draftbar" id="draftBar" hidden></div>
+  </div>
+</div>
+<div class="modal" id="modal" hidden>
+  <div class="mpanel" role="dialog" aria-modal="true" aria-labelledby="mTitle">
+    <div class="mhead"><h2 id="mTitle"></h2><button class="btn quiet" id="mClose">Close</button></div>
+    <div class="mbody" id="mBody"></div>
+  </div>
+</div>
+
+<script>
+(() => {
+/* ================= data ================= */
+const LAND = [ // broad terrain that fits any world; anything else is a custom land
+  ["desert","Desert","#dcc58a","dots"],["forest","Forest","#4a7a45","canopy"],["hills","Hills","#b09a63","hill"],
+  ["mountains","Mountains","#82796e","peak"],["grassland","Plains","#a9bb6c","grass"],["sea","Water","#2f5d86","waves"],
+  ["swamp","Wetland","#61714d","tuft"]
+];
+// retired defaults: still drawn if already on the map, no longer offered
+const RETIRED = [["shallows","Shallows","#5f97bb","ripple"],["river","River","#6aa6cf","river"],["glacier","Glacier","#e3edf3","flake"],
+  ["lake","Lake","#4a8cbc","ripple"],["jungle","Rainforest","#2d6a4f","canopies"],["volcano","Volcano","#7a3b33","cone"],
+  ["tundra","Tundra","#b8c4ba","dash"]];
+// symbols a custom land can use
+const GLYPHS = [["waves","Waves"],["ripple","Ripple"],["grass","Grass"],["canopy","Tree"],["canopies","Trees"],["tuft","Reeds"],
+  ["hill","Hill"],["peak","Peak"],["dots","Sand"],["dash","Frost"],["flake","Flake"],["cone","Volcano"]];
+const LAND_COLORS = [["Deep blue","#2f5d86"],["Blue","#4a8cbc"],["Teal","#2f8a7e"],["Green","#4a7a45"],["Dark green","#2d6a4f"],["Olive","#61714d"],
+  ["Sage","#a9bb6c"],["Sand","#dcc58a"],["Ochre","#b09a63"],["Stone","#82796e"],["Rust","#7a3b33"],["Frost","#b8c4ba"],["Snow","#e3edf3"],["Ash","#4b4f58"],["Violet","#6e5a8f"],["Rose","#b5677a"]];
+const RIVER_BLUE = "#3f8fd0";
+const NATURES = [
+  ["Baneful","Something in this land does harm to whatever stays"],["Burning","Something in this land is on fire"],
+  ["Carved","Something in this land looks made"],["Deep","This land goes further down than up"],
+  ["Fading","Everything in this land is thin on the ground"],["Faithful","This land keeps its word and makes good what goes wrong"],
+  ["Frozen","Something in this land never thaws"],["Hungry","Something in this land is always taking"],
+  ["Lavish","This land gives more than anything on it could use"],["Quickening","Something in this land brings things to life"],
+  ["Radiant","This land is bright"],["Roaring","This land is never quiet"],["Skyward","This land goes further up than down"],
+  ["Still","Nothing in this land moves, and nothing makes a sound"],["Tangled","Nothing in this land runs straight"],
+  ["Teeming","This land is full of living things"],["Veiled","This land is concealed or covered in something"],
+  ["Wild","Nothing in this land has ever been tamed, and no two years of it are alike"]
+];
+const MARKERS = {legend:["Dot","dot"], city:["Star","star"], army:["Square","square"], wonder:["Diamond","diamond"],
+  tri:["Triangle","tri"], ring:["Ring","ring"], cross:["Cross","cross"], moon:["Crescent","moon"], flag:["Flag","flag"]}; // meaning is up to the players
+const PALETTE = [["Crimson","#c8323c"],["Amber","#e0912f"],["Gold","#e6c440"],["Leaf","#4caf50"],["Teal","#1fa39a"],["Sky","#3d9be0"],
+  ["Indigo","#4b56c8"],["Violet","#8e4fc8"],["Rose","#e05f9c"],["Umber","#8a5a3b"],["Slate","#5f6b7a"],["Bone","#efe6d2"]];
+const AGES = {1:["First Age",19],2:["Second Age",7],3:["Third Age",1]};
+
+let COLS = 32, ROWS = 53, age = 1;
+let posts = [];                 // saved posts, sorted by id (= time order)
+let base = new Map();           // the world now: fold of all posts
+const draft = new Map();        // hexId -> patch, private until saved
+const selection = new Set();
+let histIdx = null, histState = null;
+const customLand = new Map();   // key "x-<id>" -> {name,color}
+const customNat = new Set();
+const peoples = new Map();      // id -> {name,color}
+const undoStack = [];
+let hinted = false;
+try { hinted = localStorage.getItem("soc-hinted") === "1"; } catch(e){}
+let selectMode = false, moveState = null, sheetCat = null, sheetForm = null, focusHex = null;
+let db = null, user = null, myId = null, canWrite = true;
+const names = new Map();        // user id -> display name
+
+const $ = id => document.getElementById(id);
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const hid = (c,r) => `h${c}_${r}`;
+const parse = id => id.slice(1).split("_").map(Number);
+const rid = () => Math.random().toString(36).slice(2,10);
+
+function landInfo(t){
+  if (!t) return null;
+  const b = LAND.find(l => l[0]===t) || RETIRED.find(l => l[0]===t); if (b) return {name:b[1], color:b[2], glyph:b[3]};
+  const c = customLand.get(t); if (c) return {name:c.name, color:c.color, glyph:c.glyph || "letter"};
+  return {name:"Other land", color:"#8f8a82", glyph:"letter"};
+}
+function merge(a, p){
+  if (!p) return a || null;
+  const o = {...(a||{})};
+  for (const [k,v] of Object.entries(p)){ if (v===null || (Array.isArray(v) && !v.length)) delete o[k]; else o[k]=v; }
+  return Object.keys(o).length ? o : null;
+}
+function fold(list){
+  const m = new Map();
+  for (const p of list) for (const [id,patch] of Object.entries(p.changes||{})){ const v = merge(m.get(id), patch); if (v) m.set(id,v); else m.delete(id); }
+  return m;
+}
+const same = (a,b) => JSON.stringify(a??null) === JSON.stringify(b??null);
+function view(id){ return histIdx!==null ? (histState.get(id)||null) : merge(base.get(id), draft.get(id)); }
+function setField(id, field, value){
+  if (Array.isArray(value) && !value.length) value = null;
+  const b = base.get(id) || {}, p = {...(draft.get(id)||{})};
+  if (same(b[field], value)) delete p[field]; else p[field] = value;
+  if (Object.keys(p).length) draft.set(id,p); else draft.delete(id);
+}
+function snapshot(){ undoStack.push(JSON.stringify([...draft])); if (undoStack.length > 60) undoStack.shift(); }
+function undo(){
+  if (!undoStack.length) return;
+  const prev = JSON.parse(undoStack.pop()); draft.clear(); for (const [k,v] of prev) draft.set(k,v);
+  sheetForm = null; afterEdit(); toast("Undone."); say("Undone.");
+}
+function afterEdit(){ saveDraftLocal(); renderDraftBar(); renderSheet(); draw(); }
+
+/* ================= geometry ================= */
+const S = 10, SQ3 = Math.sqrt(3);
+const inB = (c,r) => c>=0 && r>=0 && c<COLS && r<ROWS;
+const center = (c,r) => [SQ3*S*(c+0.5+0.5*(r&1)), S+1.5*S*r];
+const worldW = () => SQ3*S*(COLS+0.5), worldH = () => S*(1.5*(ROWS-1)+2);
+function pick(wx, wy){
+  const px = wx - SQ3*S/2, py = wy - S;
+  const q = (SQ3/3*px - py/3)/S, r = (2/3*py)/S;
+  let x=q, z=r, y=-x-z, rx=Math.round(x), ry=Math.round(y), rz=Math.round(z);
+  const dx=Math.abs(rx-x), dy=Math.abs(ry-y), dz=Math.abs(rz-z);
+  if (dx>dy && dx>dz) rx=-ry-rz; else if (dy>dz) ry=-rx-rz; else rz=-rx-ry;
+  const c = rx + (rz - (rz&1))/2;
+  return inB(c,rz) ? [c,rz] : null;
+}
+function edgeNeighbors(c,r){ // order matches edges E, SE, SW, W, NW, NE
+  const o = r&1;
+  return [[c+1,r],[c+o,r+1],[c-1+o,r+1],[c-1,r],[c-1+o,r-1],[c+o,r-1]];
+}
+
+/* ================= view ================= */
+const canvas = $("map"), ctx = canvas.getContext("2d"), stage = $("stage");
+const V = {k:1, ox:0, oy:0}; let W=0, H=0, DPR=1, fitK=1;
+function resize(){
+  const b = stage.getBoundingClientRect(); DPR = window.devicePixelRatio||1;
+  const first = !W, oldW = W, oldH = H; W=b.width; H=b.height;
+  if (!first){ V.ox += (W-oldW)/2; V.oy += (H-oldH)/2; }
+  canvas.width = Math.round(W*DPR); canvas.height = Math.round(H*DPR);
+  if (first) fit(); else { if (reveal){ ensureVisible(...parse(reveal)); } }
+  if (raf){ cancelAnimationFrame(raf); } raf = 0; paint(); // resizing clears the canvas, so repaint now rather than next frame
+}
+function fit(){
+  fitK = Math.min((W-16)/worldW(), (H-16)/worldH());
+  V.k = fitK; V.ox = (W - worldW()*V.k)/2; V.oy = (H - worldH()*V.k)/2; draw();
+}
+const hexPx = () => SQ3*S*V.k;
+function zoomAt(f, sx, sy){
+  const k2 = Math.min(Math.max(V.k*f, fitK*0.8), 130/(SQ3*S));
+  V.ox = sx - (sx-V.ox)*k2/V.k; V.oy = sy - (sy-V.oy)*k2/V.k; V.k = k2; draw();
+}
+const toWorld = (sx,sy) => [(sx-V.ox)/V.k, (sy-V.oy)/V.k];
+function ensureVisible(c,r){
+  const [x,y] = center(c,r), sx = x*V.k+V.ox, sy = y*V.k+V.oy, m = Math.max(60, hexPx());
+  if (sx<m) V.ox += m-sx; if (sx>W-m) V.ox -= sx-(W-m);
+  if (sy<m) V.oy += m-sy; if (sy>H-m) V.oy -= sy-(H-m);
+}
+
+/* ================= drawing ================= */
+let raf = 0; function draw(){ if (!raf) raf = requestAnimationFrame(paint); }
+function hexPath(cx,cy,s){ ctx.beginPath(); for (let i=0;i<6;i++){ const a=Math.PI/180*(60*i-30); const x=cx+s*Math.cos(a), y=cy+s*Math.sin(a); i?ctx.lineTo(x,y):ctx.moveTo(x,y);} ctx.closePath(); }
+function lum(hex){ const n=parseInt(hex.slice(1),16); return (0.299*(n>>16)+0.587*((n>>8)&255)+0.114*(n&255))/255; }
+const inkFor = color => lum(color) < 0.55 ? "rgba(255,255,255,.85)" : "rgba(20,24,34,.75)";
+
+function glyph(g, cx, cy, s, ink, label, c2){
+  const C = c2 || ctx;
+  C.strokeStyle = ink; C.fillStyle = ink; C.lineWidth = s*0.09; C.lineCap="round"; C.lineJoin="round";
+  const u = s*0.28; C.beginPath();
+  switch(g){
+    case "waves": for (const dy of [-u*.45,u*.45]){ C.moveTo(cx-u*1.3,cy+dy); C.quadraticCurveTo(cx-u*.65,cy+dy-u*.5,cx,cy+dy); C.quadraticCurveTo(cx+u*.65,cy+dy+u*.5,cx+u*1.3,cy+dy);} C.stroke(); break;
+    case "ripple": C.moveTo(cx-u*1.1,cy); C.quadraticCurveTo(cx-u*.55,cy-u*.5,cx,cy); C.quadraticCurveTo(cx+u*.55,cy+u*.5,cx+u*1.1,cy); C.stroke(); break;
+    case "river": C.lineWidth=s*.16; C.moveTo(cx-u*.6,cy-u*1.4); C.bezierCurveTo(cx+u*1.2,cy-u*.5,cx-u*1.2,cy+u*.5,cx+u*.6,cy+u*1.4); C.stroke(); break;
+    case "grass": for (const dx of [-u*.8,0,u*.8]){ C.moveTo(cx+dx,cy+u*.5); C.lineTo(cx+dx+u*.15,cy-u*.5);} C.stroke(); break;
+    case "canopy": C.moveTo(cx,cy+u*.2); C.lineTo(cx,cy+u*.9); C.stroke(); C.beginPath(); C.arc(cx,cy-u*.25,u*.6,0,Math.PI*2); C.fill(); break;
+    case "canopies": for (const [dx,dy] of [[-u*.55,u*.15],[u*.55,u*.15],[0,-u*.45]]){ C.moveTo(cx+dx+u*.5,cy+dy); C.arc(cx+dx,cy+dy,u*.5,0,Math.PI*2);} C.fill(); break;
+    case "tree": C.moveTo(cx,cy-u*1.1); C.lineTo(cx+u*.8,cy+u*.6); C.lineTo(cx-u*.8,cy+u*.6); C.closePath(); C.fill(); break;
+    case "trees": for (const dx of [-u*.6,u*.6]){ C.moveTo(cx+dx,cy-u); C.lineTo(cx+dx+u*.6,cy+u*.6); C.lineTo(cx+dx-u*.6,cy+u*.6); C.closePath(); } C.fill(); break;
+    case "tuft": C.moveTo(cx-u,cy+u*.5); C.lineTo(cx+u,cy+u*.5); for (const dx of [-u*.5,0,u*.5]){ C.moveTo(cx+dx,cy+u*.5); C.lineTo(cx+dx*1.4,cy-u*.6);} C.stroke(); break;
+    case "hill": C.arc(cx,cy+u*.6,u,Math.PI,0); C.stroke(); break;
+    case "peak": C.moveTo(cx-u*1.2,cy+u*.7); C.lineTo(cx-u*.4,cy-u*.7); C.lineTo(cx+u*.1,cy+u*.1); C.lineTo(cx+u*.5,cy-u*.4); C.lineTo(cx+u*1.2,cy+u*.7); C.stroke(); break;
+    case "dots": for (const [dx,dy] of [[-u*.7,u*.3],[0,-u*.4],[u*.7,u*.3]]){ C.moveTo(cx+dx+u*.18,cy+dy); C.arc(cx+dx,cy+dy,u*.18,0,Math.PI*2);} C.fill(); break;
+    case "dash": for (const dy of [-u*.35,u*.35]){ C.moveTo(cx-u*.9,cy+dy); C.lineTo(cx-u*.1,cy+dy); C.moveTo(cx+u*.2,cy+dy); C.lineTo(cx+u*.9,cy+dy);} C.stroke(); break;
+    case "flake": for (let i=0;i<3;i++){ const a=Math.PI/3*i; C.moveTo(cx-Math.cos(a)*u,cy-Math.sin(a)*u); C.lineTo(cx+Math.cos(a)*u,cy+Math.sin(a)*u);} C.stroke(); break;
+    case "cone": C.moveTo(cx-u*1.1,cy+u*.7); C.lineTo(cx-u*.3,cy-u*.7); C.lineTo(cx+u*.3,cy-u*.7); C.lineTo(cx+u*1.1,cy+u*.7); C.closePath(); C.fill(); C.beginPath(); C.fillStyle="#ff8a3d"; C.arc(cx,cy-u*.85,u*.25,0,Math.PI*2); C.fill(); break;
+    default: C.font = `700 ${s*0.7}px "Atkinson Hyperlegible", sans-serif`; C.textAlign="center"; C.textBaseline="middle"; C.fillText((label||"?").slice(0,1).toUpperCase(), cx, cy+s*.02);
+  }
+}
+function shapePath(C, shape, x, y, r){
+  const poly = pts => { pts.forEach(([a,b],i) => i ? C.lineTo(x+a*r,y+b*r) : C.moveTo(x+a*r,y+b*r)); C.closePath(); };
+  C.beginPath();
+  switch(shape){
+    case "dot": C.arc(x,y,r*.75,0,Math.PI*2); break;
+    case "square": C.rect(x-r*.72,y-r*.72,r*1.44,r*1.44); break;
+    case "diamond": poly([[0,-1],[.8,0],[0,1],[-.8,0]]); break;
+    case "tri": poly([[0,-.95],[.92,.7],[-.92,.7]]); break;
+    case "ring": C.arc(x,y,r*.85,0,Math.PI*2); C.moveTo(x+r*.42,y); C.arc(x,y,r*.42,0,Math.PI*2,true); break;
+    case "cross": { const a=.3, b=.9; poly([[-a,-b],[a,-b],[a,-a],[b,-a],[b,a],[a,a],[a,b],[-a,b],[-a,a],[-b,a],[-b,-a],[-a,-a]]); break; }
+    case "moon": C.arc(x,y,r*.85,Math.PI*.3,Math.PI*1.7); C.arc(x+r*.42,y,r*.62,Math.PI*1.62,Math.PI*.38,true); C.closePath(); break;
+    case "flag": C.moveTo(x-r*.6,y+r*.95); C.lineTo(x-r*.6,y-r*.95); C.lineTo(x+r*.8,y-r*.55); C.lineTo(x-r*.35,y-r*.1); C.lineTo(x-r*.35,y+r*.95); C.closePath(); break;
+    default: { for (let i=0;i<10;i++){ const a=-Math.PI/2+i*Math.PI/5, rr=i%2?.45:1; i?C.lineTo(x+rr*r*Math.cos(a),y+rr*r*Math.sin(a)):C.moveTo(x+rr*r*Math.cos(a),y+rr*r*Math.sin(a)); } C.closePath(); }
+  }
+}
+function marker(shape, x, y, r, color){
+  shapePath(ctx, shape, x, y, r);
+  ctx.fillStyle = color; ctx.fill("evenodd");
+  ctx.lineWidth = r*.22; ctx.strokeStyle = lum(color) > .6 ? "#1a1d26" : "#ffffff"; ctx.stroke();
+  ctx.lineWidth = r*.08; ctx.strokeStyle = "#1a1d26"; ctx.stroke();
+}
+function paint(){
+  raf = 0;
+  ctx.setTransform(DPR,0,0,DPR,0,0); ctx.fillStyle = css("--void"); ctx.fillRect(0,0,W,H);
+  ctx.setTransform(DPR*V.k,0,0,DPR*V.k,DPR*V.ox,DPR*V.oy);
+  const unmade = css("--unmade"), grid = css("--grid"), accent = css("--accent"), sel = css("--sel"), dcol = css("--draft"), surface = css("--surface"), fg = css("--fg");
+  const px = hexPx(), lw = 1/V.k;
+  const [x0,y0] = toWorld(-30,-30), [x1,y1] = toWorld(W+30,H+30);
+  const vis = (cx,cy) => cx>=x0 && cx<=x1 && cy>=y0 && cy<=y1;
+  const cells = [];
+  for (let r=0;r<ROWS;r++) for (let c=0;c<COLS;c++){
+    const [cx,cy] = center(c,r); if (!vis(cx,cy)) continue;
+    const id = hid(c,r), d = view(id), L = d && landInfo(d.t);
+    hexPath(cx,cy,S+.03); ctx.fillStyle = L ? L.color : unmade; ctx.fill();
+    if (px > 9){ ctx.strokeStyle = L ? "rgba(0,0,0,.16)" : grid; ctx.lineWidth = lw; ctx.stroke(); }
+    if (L && px >= 16 && !(d.m && d.m.length)) glyph(L.glyph, cx, cy - (px>=40 ? S*.25 : 0), S, inkFor(L.color), L.name);
+    if (d) cells.push([c,r,cx,cy,d,L]);
+  }
+  // peoples: tint + border where the neighbor differs
+  for (const [c,r,cx,cy,d] of cells){
+    if (!d.p || !peoples.has(d.p)) continue;
+    const col = peoples.get(d.p).color, nb = edgeNeighbors(c,r);
+    hexPath(cx,cy,S); ctx.globalAlpha = .14; ctx.fillStyle = col; ctx.fill(); ctx.globalAlpha = 1;
+    ctx.strokeStyle = col; ctx.lineWidth = Math.max(2.5*lw, S*.16); ctx.lineCap = "round";
+    for (let i=0;i<6;i++){
+      const [nc,nr] = nb[i]; const nd = inB(nc,nr) ? view(hid(nc,nr)) : null;
+      if (nd && nd.p === d.p) continue;
+      const a1 = Math.PI/180*(60*i-30), a2 = Math.PI/180*(60*(i+1)-30), s = S*.86;
+      ctx.beginPath(); ctx.moveTo(cx+s*Math.cos(a1),cy+s*Math.sin(a1)); ctx.lineTo(cx+s*Math.cos(a2),cy+s*Math.sin(a2)); ctx.stroke();
+    }
+  }
+  // rivers sit on top of the land: link to neighbouring river hexes and to sea or lake
+  for (const [c,r,cx,cy,d] of cells){
+    if (!d.r) continue;
+    const links = [];
+    for (const [nc,nr] of edgeNeighbors(c,r)){ if (!inB(nc,nr)) continue; const nd = view(hid(nc,nr)); if (nd && (nd.r || nd.t==="sea" || nd.t==="lake" || (landInfo(nd.t)||{}).glyph==="waves" || (landInfo(nd.t)||{}).glyph==="ripple")) links.push(center(nc,nr)); }
+    ctx.lineCap = "round"; ctx.lineJoin = "round";
+    for (const pass of [0,1]){
+      ctx.strokeStyle = pass ? RIVER_BLUE : "rgba(10,20,40,.55)"; ctx.lineWidth = pass ? Math.max(2*lw, S*.2) : Math.max(3.5*lw, S*.32);
+      ctx.beginPath();
+      if (!links.length){ ctx.moveTo(cx-S*.6,cy+S*.35); ctx.bezierCurveTo(cx-S*.2,cy-S*.5,cx+S*.2,cy+S*.5,cx+S*.6,cy-S*.35); }
+      for (const [nx,ny] of links){ ctx.moveTo(cx,cy); ctx.lineTo((cx+nx)/2,(cy+ny)/2); }
+      ctx.stroke();
+    }
+  }
+  // natures and markers
+  for (const [c,r,cx,cy,d,L] of cells){
+    const nat = d.n || [], ink = L ? inkFor(L.color) : fg;
+    if (nat.length){
+      if (px >= 40){ ctx.fillStyle = ink; ctx.font = `700 ${S*.34}px "Atkinson Hyperlegible", sans-serif`; ctx.textAlign="center"; ctx.textBaseline="middle";
+        ctx.fillText(nat.slice(0,2).map(n=>n.slice(0,3)).join(" ") + (nat.length>2?" +":""), cx, cy+S*.48); }
+      else if (px >= 9){ ctx.fillStyle = ink; ctx.beginPath(); ctx.arc(cx+S*.5,cy+S*.45,S*.11,0,Math.PI*2); ctx.fill(); }
+    }
+    const ms = d.m || []; if (!ms.length) continue;
+    const n = Math.min(ms.length, 3), r0 = S*(n>1?.3:.38);
+    ms.slice(0,3).forEach((m,i) => {
+      const x = cx + (i-(n-1)/2)*S*.62, y = cy - S*.05;
+      marker(MARKERS[m.k] ? MARKERS[m.k][1] : "dot", x, y, r0, m.color || "#e6c440");
+    });
+    if (ms.length > 3 && px >= 24){ ctx.fillStyle = fg; ctx.font = `700 ${S*.3}px sans-serif`; ctx.textAlign="center"; ctx.fillText(`+${ms.length-3}`, cx+S*.7, cy-S*.5); }
+    if (px >= 46){
+      const label = ms.length > 1 ? `${ms[0].label||""} +${ms.length-1}` : (ms[0].label||"");
+      if (label){ ctx.font = `700 ${S*.26}px "Atkinson Hyperlegible", sans-serif`; ctx.textAlign="center"; ctx.textBaseline="middle";
+        let t = label; while (t.length > 3 && ctx.measureText(t).width > S*1.4) t = t.slice(0,-2) + "…";
+        const w = ctx.measureText(t).width + S*.2, ty = cy - S*.56, h = S*.36;
+        ctx.fillStyle = surface; ctx.globalAlpha = .9; ctx.beginPath(); ctx.roundRect ? ctx.roundRect(cx-w/2, ty-h/2, w, h, h/2) : ctx.rect(cx-w/2, ty-h/2, w, h); ctx.fill(); ctx.globalAlpha = 1;
+        ctx.fillStyle = fg; ctx.fillText(t, cx, ty + S*.01); }
+    }
+  }
+  // draft marks, history outlines, selection, focus
+  if (histIdx === null) for (const id of draft.keys()){
+    const [c,r] = parse(id); if (!inB(c,r)) continue; const [cx,cy] = center(c,r); if (!vis(cx,cy)) continue;
+    ctx.fillStyle = dcol; ctx.beginPath(); ctx.arc(cx-S*.66,cy,Math.max(S*.11, 2.5*lw),0,Math.PI*2); ctx.fill();
+  } else for (const id of Object.keys(posts[histIdx].changes||{})){
+    const [c,r] = parse(id); if (!inB(c,r)) continue; const [cx,cy] = center(c,r); if (!vis(cx,cy)) continue;
+    hexPath(cx,cy,S*.9); ctx.strokeStyle = accent; ctx.lineWidth = Math.max(2.5*lw, S*.13); ctx.stroke();
+  }
+  for (const id of selection){
+    const [c,r] = parse(id); const [cx,cy] = center(c,r); if (!vis(cx,cy)) continue;
+    hexPath(cx,cy,S*.97); ctx.fillStyle = sel; ctx.fill(); ctx.strokeStyle = accent; ctx.lineWidth = Math.max(2*lw, S*.1); ctx.stroke();
+  }
+  if (focusHex && document.activeElement === canvas && canvas.matches(":focus-visible")){
+    const [cx,cy] = center(...focusHex); hexPath(cx,cy,S*.8);
+    ctx.setLineDash([S*.25,S*.15]); ctx.strokeStyle = fg; ctx.lineWidth = Math.max(2*lw,S*.1); ctx.stroke(); ctx.setLineDash([]);
+  }
+  updateHint();
+}
+
+/* ================= description (text access) ================= */
+function describe(c,r){
+  const d = view(hid(c,r)), parts = [`Hex ${c+1}, ${r+1}.`];
+  if (!d) return parts.concat("Unshaped.").join(" ");
+  const L = landInfo(d.t); parts.push(L ? L.name + "." : "No land type.");
+  if (d.r) parts.push("River.");
+  if (d.n && d.n.length) parts.push("Natures: " + d.n.join(", ") + ".");
+  if (d.p && peoples.has(d.p)) parts.push("Settled by " + peoples.get(d.p).name + ".");
+  if (d.m && d.m.length) parts.push("Markers: " + d.m.map(m => `${(PALETTE.find(p=>p[1]===m.color)||[""])[0]} ${(MARKERS[m.k]?.[0]||"marker").toLowerCase()}${m.label?" "+m.label:""}`.trim()).join(", ") + ".");
+  if (selection.has(hid(c,r))) parts.push("Selected.");
+  return parts.join(" ");
+}
+function say(t){ const l = $("live"); l.textContent = ""; setTimeout(() => l.textContent = t, 30); }
+
+/* ================= pointer input ================= */
+const pts = new Map(); let G = null;
+const editing = () => histIdx === null && canWrite;
+canvas.addEventListener("pointerdown", e => {
+  canvas.setPointerCapture(e.pointerId); pts.set(e.pointerId, {x:e.offsetX, y:e.offsetY});
+  if (pts.size === 1){
+    G = {type:"pan", sx:e.offsetX, sy:e.offsetY, ox:V.ox, oy:V.oy, moved:false};
+    if (editing() && !moveState && e.button === 0){
+      const g = G;
+      g.hold = setTimeout(() => {               // hold a hex to add it to the selection
+        if (G !== g || g.moved || pts.size !== 1 || hexPx() < 30) return;
+        const h = pick(...toWorld(g.sx, g.sy)); if (!h) return;
+        g.type = "held"; try { navigator.vibrate && navigator.vibrate(12); } catch(err){}
+        selectHex(hid(...h), true);
+      }, 450);
+    }
+  } else if (pts.size === 2){
+    if (G && G.hold) clearTimeout(G.hold);
+    if (G && G.type === "select" && G.touched.length <= 2){ for (const [id,was] of G.touched){ was ? selection.add(id) : selection.delete(id); } renderSheet(); }
+    const [a,b] = [...pts.values()];
+    G = {type:"pinch", d:Math.hypot(a.x-b.x,a.y-b.y)||1, mx:(a.x+b.x)/2, my:(a.y+b.y)/2, k:V.k, ox:V.ox, oy:V.oy};
+    draw();
+  }
+});
+function selectThrough(sx, sy){
+  const h = pick(...toWorld(sx,sy)); if (!h) return; const id = hid(...h);
+  if (G.last === id) return; G.last = id;
+  const was = selection.has(id); G.touched.push([id, was]);
+  if (G.mode === "add") selection.add(id); else selection.delete(id);
+  draw();
+}
+canvas.addEventListener("pointermove", e => {
+  if (!pts.has(e.pointerId) || !G) return;
+  pts.set(e.pointerId, {x:e.offsetX, y:e.offsetY});
+  if (G.type === "pending"){
+    if (Math.hypot(e.offsetX-G.sx, e.offsetY-G.sy) < 8) return;
+    if (moveState){ G.type = "pan"; }
+    else {
+      const h0 = pick(...toWorld(G.sx,G.sy));
+      G = {type:"select", mode: h0 && selection.has(hid(...h0)) ? "remove" : "add", last:null, touched:[]};
+      selectThrough(e.offsetX, e.offsetY);
+      return;
+    }
+  }
+  if (G.type === "select"){
+    // fill in between samples so fast drags don't skip hexes
+    const prev = G.lastPt || {x:e.offsetX,y:e.offsetY}, dist = Math.hypot(e.offsetX-prev.x, e.offsetY-prev.y), step = Math.max(4, hexPx()/3);
+    for (let t=step; t<dist; t+=step) selectThrough(prev.x+(e.offsetX-prev.x)*t/dist, prev.y+(e.offsetY-prev.y)*t/dist);
+    selectThrough(e.offsetX, e.offsetY); G.lastPt = {x:e.offsetX,y:e.offsetY};
+  } else if (G.type === "pan"){
+    const dx = e.offsetX-G.sx, dy = e.offsetY-G.sy; if (Math.abs(dx)+Math.abs(dy) > 6){ G.moved = true; if (G.hold) clearTimeout(G.hold); }
+    V.ox = G.ox+dx; V.oy = G.oy+dy; draw();
+  } else if (G.type === "pinch" && pts.size >= 2){
+    const [a,b] = [...pts.values()], d = Math.hypot(a.x-b.x,a.y-b.y), mx=(a.x+b.x)/2, my=(a.y+b.y)/2;
+    const k2 = Math.min(Math.max(G.k*d/G.d, fitK*0.8), 130/(SQ3*S));
+    V.k = k2; V.ox = mx-(G.mx-G.ox)*k2/G.k; V.oy = my-(G.my-G.oy)*k2/G.k; draw();
+  }
+});
+function endPointer(e){
+  if (!pts.has(e.pointerId)) return;
+  pts.delete(e.pointerId);
+  if (G && G.hold) clearTimeout(G.hold);
+  if (G && pts.size === 0){
+    if (G.type === "pending") tap(e.offsetX, e.offsetY);
+    else if (G.type === "pan" && !G.moved && histIdx === null) tap(e.offsetX, e.offsetY); // view-only players can still look at hexes
+    if (G.type === "select") { renderSheet(); const n = selection.size; say(`${n} ${n===1?"hex":"hexes"} selected.`); }
+    G = null;
+  } else if (pts.size === 1 && G && G.type === "pinch"){
+    const p = [...pts.values()][0]; G = {type:"pan", sx:p.x, sy:p.y, ox:V.ox, oy:V.oy, moved:true};
+  }
+}
+canvas.addEventListener("pointerup", endPointer);
+canvas.addEventListener("pointercancel", endPointer);
+canvas.addEventListener("contextmenu", e => e.preventDefault());
+canvas.addEventListener("wheel", e => {
+  e.preventDefault();
+  if (e.ctrlKey || e.metaKey) zoomAt(Math.exp(-e.deltaY*0.01), e.offsetX, e.offsetY);
+  else { V.ox -= e.deltaX; V.oy -= e.deltaY; draw(); }
+}, {passive:false});
+
+function tap(sx, sy){
+  const h = pick(...toWorld(sx,sy)); if (!h) return;
+  if (hexPx() < 30){ // too small to hit reliably: zoom in on that spot first
+    zoomAt(46/hexPx(), sx, sy); toast("Zoomed in. Tap a hex to select it."); return;
+  }
+  if (moveState){ moveMarkerTo(hid(...h)); return; }
+  selectHex(hid(...h), false);
+}
+let reveal = null;
+function needsLand(ids){ return ids.length > 0 && ids.some(id => !(view(id)||{}).t); }
+let adding = false;   // after a hold or Grow, taps add and remove instead of switching
+function selectHex(id, add){
+  if (add || adding){
+    adding = true;
+    if (selection.has(id)) selection.delete(id); else selection.add(id);
+    if (!selection.size) adding = false;
+  } else if (selection.size === 1 && selection.has(id)){
+    selection.clear();
+  } else { selection.clear(); selection.add(id); growStack.length = 0; }
+  afterSelect(id);
+}
+function grow(){
+  const add = [];
+  for (const id of selection){ const [c,r] = parse(id); for (const [nc,nr] of edgeNeighbors(c,r)) if (inB(nc,nr)) add.push(hid(nc,nr)); }
+  const fresh = add.filter(id => !selection.has(id));
+  for (const id of fresh) selection.add(id);
+  growStack.push(new Set(fresh));
+  adding = true; afterSelect(null);
+  say(`${selection.size} hexes selected.`);
+}
+const growStack = [];
+function outerRing(){ // hexes on the edge of the selection; the map edge doesn't count as an edge
+  const out = [];
+  for (const id of selection){ const [c,r] = parse(id); if (edgeNeighbors(c,r).some(([nc,nr]) => inB(nc,nr) && !selection.has(hid(nc,nr)))) out.push(id); }
+  return out;
+}
+function canShrink(){ return selection.size > 1 && (growStack.length || outerRing().length < selection.size); }
+function shrink(){
+  let drop = null;
+  while (growStack.length && !drop){ const last = growStack.pop(); const live = [...last].filter(id => selection.has(id)); if (live.length && live.length < selection.size) drop = live; }
+  if (!drop){ const ring = outerRing(); if (ring.length >= selection.size) return; drop = ring; }
+  for (const id of drop) selection.delete(id);
+  afterSelect(null); say(`${selection.size} ${selection.size===1?"hex":"hexes"} selected.`);
+}
+function ringCount(){
+  const extra = new Set();
+  for (const id of selection){ const [c,r] = parse(id); for (const [nc,nr] of edgeNeighbors(c,r)) if (inB(nc,nr) && !selection.has(hid(nc,nr))) extra.add(hid(nc,nr)); }
+  return extra.size;
+}
+function afterSelect(id){
+  sheetForm = null;
+  // jump straight to land only when none of the selected hexes has land yet
+  const sel = [...selection];
+  sheetCat = canWrite && sel.length && sel.every(x => !(view(x)||{}).t) ? "Land" : null;
+  reveal = id && selection.has(id) ? id : null; if (reveal){ ensureVisible(...parse(id)); }
+  if (selection.size && !hinted){ hinted = true; try { localStorage.setItem("soc-hinted","1"); } catch(e){} }
+  renderSheet(); draw();
+}
+function updateHint(){
+  const h = $("hint"), show = !hinted && canWrite && histIdx === null && selection.size === 0 && modal.hidden;
+  h.hidden = !show; if (!show) return;
+  const t = hexPx() < 30 ? "Tap the map to zoom in" : "Tap a hex to change it";
+  if (h.textContent !== t) h.textContent = t;
+}
+
+/* ================= keyboard ================= */
+canvas.addEventListener("focus", () => { if (!focusHex) focusHex = [Math.floor(COLS/2), Math.floor(ROWS/2)]; say(describe(...focusHex)); draw(); });
+canvas.addEventListener("blur", draw);
+canvas.addEventListener("keydown", e => {
+  const k = e.key; let [c,r] = focusHex || [0,0];
+  const moves = {ArrowLeft:[-1,0], ArrowRight:[1,0], ArrowUp:[0,-1], ArrowDown:[0,1]};
+  if (moves[k]){ e.preventDefault(); const [dc,dr] = moves[k]; const nc = Math.min(COLS-1,Math.max(0,c+dc)), nr = Math.min(ROWS-1,Math.max(0,r+dr)); focusHex = [nc,nr]; ensureVisible(nc,nr); draw(); say(describe(nc,nr)); }
+  else if ((k===" " || k==="Enter") && editing()){ e.preventDefault(); const id = hid(c,r); if (moveState) moveMarkerTo(id); else { selectHex(id, k === " "); say(describe(c,r)); } }
+  else if (k==="Escape"){ clearSelection(); say("Selection cleared."); }
+  else if (k==="+" || k==="="){ zoomAt(1.4, W/2, H/2); }
+  else if (k==="-"){ zoomAt(1/1.4, W/2, H/2); }
+});
+$("zin").onclick = () => zoomAt(1.5, W/2, H/2);
+$("zout").onclick = () => zoomAt(1/1.5, W/2, H/2);
+$("zfit").onclick = fit;
+
+
+/* ================= DOM helpers ================= */
+function el(tag, attrs={}, ...kids){
+  const e = document.createElement(tag);
+  for (const [k,v] of Object.entries(attrs)){ if (v==null || v===false) continue; if (k==="class") e.className=v; else if (k.startsWith("on")) e[k]=v; else e.setAttribute(k, v===true?"":v); }
+  for (const kid of kids.flat()) if (kid!=null && kid!==false) e.append(kid);
+  return e;
+}
+function landIcon(t){
+  const L = landInfo(t), cv = document.createElement("canvas"), d = 56; cv.width = d; cv.height = d;
+  cv.style.cssText = "width:28px;height:28px;flex:0 0 28px;display:block";
+  const c2 = cv.getContext("2d"); c2.fillStyle = L.color; c2.fillRect(0,0,d,d);
+  glyph(L.glyph, d/2, d/2, d*.55, inkFor(L.color), L.name, c2); cv.setAttribute("aria-hidden","true"); return cv;
+}
+const swatch = color => el("span",{class:"sw", style:`background:${color}`, "aria-hidden":"true"});
+function markerIcon(k, color, px = 28){
+  const cv = document.createElement("canvas"), d = 56; cv.width=d; cv.height=d; cv.setAttribute("aria-hidden","true");
+  cv.style.cssText = `width:${px}px;height:${px}px;flex:0 0 ${px}px;display:block`;
+  drawMarkerOn(cv.getContext("2d"), MARKERS[k] ? MARKERS[k][1] : "dot", d/2, d/2, d*.36, color); return cv;
+}
+function drawMarkerOn(C, shape, x, y, r, color){
+  shapePath(C, shape, x, y, r); C.fillStyle = color; C.fill("evenodd"); C.lineWidth = r*.12; C.strokeStyle = "#1a1d26"; C.stroke();
+}
+function colorPicker(current, onPick){
+  const box = el("div",{class:"swatches", role:"group", "aria-label":"Color"});
+  for (const [name,hex] of PALETTE){
+    const b = el("button",{type:"button", class:"swb", style:`background:${hex}`, "aria-label":name, "aria-pressed":String(current===hex)});
+    b.onclick = () => { onPick(hex); for (const x of box.children) x.setAttribute("aria-pressed", String(x===b)); };
+    box.append(b);
+  }
+  return box;
+}
+
+/* ================= bottom sheet ================= */
+const sheet = $("sheet");
+function clearSelection(){ reveal = null; adding = false; growStack.length = 0; selection.clear(); sheetCat = null; sheetForm = null; moveState = null; renderSheet(); draw(); }
+function renderSheet(){
+  fillSheet();
+  if (!sheet.hidden && !moveState){
+    const n = selection.size, form = sheet.querySelector("form.form");
+    const picking = sheetCat === "Markers" && MARKERS[sheetForm];
+    if (picking) sheet.append(el("div",{class:"sfoot"},
+      el("button",{type:"button", class:"btn", onclick:()=>{ sheetForm=null; renderSheet(); }}, "Cancel")));
+    else if (form) sheet.append(el("div",{class:"sfoot"},
+      el("button",{type:"button", class:"btn", onclick:()=>{ sheetForm=null; landForm.state = null; renderSheet(); }}, "Cancel"), el("span",{class:"grow"}),
+      el("button",{type:"button", class:"btn primary", onclick:()=>form.requestSubmit()}, form.dataset.label)));
+    else sheet.append(el("div",{class:"sfoot"},
+      canWrite ? el("button",{type:"button", class:"btn", disabled: !undoStack.length || null, onclick:undo}, "Undo") : null,
+      el("span",{class:"what"}, adding ? `${n} ${n===1?"hex":"hexes"} · tap to add or remove` : n === 1 ? "Hold another hex to add it" : `${n} hexes selected`),
+      el("button",{type:"button", class:"btn primary", onclick:clearSelection}, "Done")));
+  }
+  renderDraftBar(); updateHint();
+}
+const colorName = hex => (PALETTE.find(p => p[1]===hex) || ["Custom"])[0];
+const markerName = m => `${colorName(m.color)} ${(MARKERS[m.k]?.[0]||"marker").toLowerCase()}`;
+function fillSheet(){
+  const show = selection.size > 0 && histIdx === null;
+  sheet.hidden = !show;
+  sheet.textContent = "";
+  if (!show) return;
+  const ids = [...selection], n = ids.length;
+  if (sheetCat === "Markers" && n > 1){ sheetCat = null; sheetForm = null; }
+  if (moveState){
+    sheet.append(el("div",{class:"movebar"}, el("span",{}, `Tap the hex to move ${moveState.label} to.`), el("button",{type:"button", onclick:()=>{ moveState=null; renderSheet(); }}, "Cancel")));
+    return;
+  }
+  // header: category on the left, a size stepper on the right ( − 7 hexes + )
+  const sizing = !sheetForm && sheetCat !== "Markers" && canWrite;
+  const count = el("span",{class:"count"}, `${n} ${n===1?"hex":"hexes"}`);
+  const stepper = sizing ? el("div",{class:"stepper", role:"group", "aria-label":"Selection size"},
+      el("button",{type:"button", class:"step", "aria-label":"Shrink the selection", disabled: !canShrink() || null, onclick:shrink}, "−"),
+      count,
+      el("button",{type:"button", class:"step", "aria-label":`Grow the selection by ${ringCount()} surrounding hexes`, disabled: !ringCount() || null, onclick:grow}, "+"))
+    : count;
+  sheet.append(el("div",{class:"shead"},
+    sheetCat ? el("button",{type:"button", class:"btn quiet", onclick:()=>{ sheetCat=null; sheetForm=null; renderSheet(); }}, "‹ Back") : null,
+    el("h2",{}, sheetCat || "Selected"), stepper));
+  if (!sheetCat){ sheet.append(rowsFor(ids)); if (!canWrite) sheet.append(el("p",{class:"note"}, "You can view this map but not change it.")); return; }
+  if (sheetCat === "Land") landOptions(ids);
+  else if (sheetCat === "Natures") natureOptions(ids);
+  else if (sheetCat === "Settled by") peopleOptions(ids);
+  else markerOptions(ids);
+}
+function rowsFor(ids){
+  const ds = ids.map(id => view(id) || {}), n = ids.length, noLand = needsLand(ids);
+  const none = t => el("span",{class:"none"}, t);
+  const allSame = f => ds.every(d => (d[f]??null) === (ds[0][f]??null));
+  let land;
+  if (!allSame("t")) land = [none("Mixed")];
+  else if (!ds[0].t) land = [none("None yet")];
+  else land = [landIcon(ds[0].t), landInfo(ds[0].t).name];
+  if (ds.some(d => d.r)) land.push(none(ds.every(d=>d.r) ? "· river" : "· some river"));
+  const nats = [...new Set(ds.flatMap(d => d.n || []))];
+  const natV = noLand ? [none("Needs land first")] : nats.length ? [nats.join(", ")] : [none("None")];
+  let ppl;
+  if (noLand) ppl = [none("Needs land first")];
+  else if (!allSame("p")) ppl = [none("Mixed")];
+  else if (ds[0].p && peoples.has(ds[0].p)) ppl = [swatch(peoples.get(ds[0].p).color), peoples.get(ds[0].p).name];
+  else ppl = [none("No one")];
+  const ms = n === 1 ? (ds[0].m || []) : [];
+  const mkV = noLand && !ms.length ? [none("Needs land first")] : ms.length ? ms.slice(0,6).map(m => markerIcon(m.k, m.color)) : [none("None")];
+  const spoken = (label, value) => label + ": " + (label === "Markers" && ms.length && !noLand ? ms.map(markerName).join(", ") : value.map(v => typeof v === "string" ? v : (v.textContent || "")).join(" ").trim());
+  const row = (label, value, enabled) => el("button",{type:"button", class:"rowbtn", disabled: (!enabled || !canWrite) || null,
+      "aria-label": spoken(label, value), onclick:()=>{ sheetCat = label; sheetForm = null; renderSheet(); }},
+    el("span",{class:"rl"}, label), el("span",{class:"rv"}, value), canWrite && enabled ? el("span",{class:"chev","aria-hidden":"true"}, "›") : null);
+  const box = el("div",{class:"rows"});
+  box.append(row("Land", land, true), row("Natures", natV, !noLand), row("Settled by", ppl, !noLand),
+    n === 1 ? row("Markers", mkV, !noLand || ms.length > 0) : el("div",{class:"rowgap","aria-hidden":"true"}));
+  return box;
+}
+function applyAll(ids, fn, msg){ snapshot(); for (const id of ids) fn(id); sheetCat = null; sheetForm = null; afterEdit(); if (msg) { toast(msg); say(msg); } }
+function otherForm(label, withColor, onAdd){
+  let name = "", color = PALETTE[0][1];
+  const f = el("form",{class:"form", onsubmit:(e)=>{ e.preventDefault(); const v = name.trim(); if (!v) { input.focus(); return; } onAdd(v, color); }});
+  const input = el("input",{id:"otherName", placeholder:label, autocomplete:"off", "aria-label":label});
+  input.oninput = () => name = input.value;
+  f.append(el("label",{for:"otherName"}, label), input);
+  if (withColor) f.append(el("span",{class:"sub"},"Color"), colorPicker(color, c => color = c));
+  f.dataset.label = "Add";
+  setTimeout(() => input.focus(), 0);
+  return f;
+}
+function glyphTile(g, color, px){
+  const cv = document.createElement("canvas"), d = 64; cv.width = d; cv.height = d; cv.setAttribute("aria-hidden","true");
+  cv.style.cssText = `width:${px}px;height:${px}px;display:block;border-radius:8px`;
+  const c2 = cv.getContext("2d"); c2.fillStyle = color; c2.fillRect(0,0,d,d); glyph(g, d/2, d/2, d*.55, inkFor(color), "?", c2);
+  return cv;
+}
+function landForm(ids){
+  const st = landForm.state || (landForm.state = {glyph:"hill", color:LAND_COLORS[8][1], name:""});
+  const f = el("form",{class:"form", onsubmit:async (e)=>{ e.preventDefault();
+    const nm = st.name.trim(); if (!nm){ input.focus(); toast("Give the land a name."); return; }
+    const key = await addCustom("land", nm, st.color, st.glyph); landForm.state = null;
+    applyAll(ids, id => setField(id,"t",key), `${nm} on ${ids.length} ${ids.length===1?"hex":"hexes"}.`);
+  }});
+  const preview = el("div",{class:"row"}); const paintPreview = () => { preview.textContent = ""; preview.append(glyphTile(st.glyph, st.color, 48), el("strong",{}, st.name.trim() || "New land")); };
+  const gbox = el("div",{class:"swatches", role:"group", "aria-label":"Symbol"});
+  const paintGlyphs = () => { gbox.textContent = ""; for (const [g,name] of GLYPHS){ const b = el("button",{type:"button", class:"swb", style:"border-radius:10px;overflow:hidden", "aria-label":name, "aria-pressed":String(st.glyph===g)}, glyphTile(g, st.color, 40)); b.onclick = () => { st.glyph = g; paintGlyphs(); paintPreview(); }; gbox.append(b); } };
+  const cbox = el("div",{class:"swatches", role:"group", "aria-label":"Color"});
+  const paintColors = () => { cbox.textContent = ""; for (const [name,hex] of LAND_COLORS){ const b = el("button",{type:"button", class:"swb", style:`background:${hex}`, "aria-label":name, "aria-pressed":String(st.color===hex)}); b.onclick = () => { st.color = hex; paintColors(); paintGlyphs(); paintPreview(); }; cbox.append(b); } };
+  const input = el("input",{id:"landName", placeholder:"Name, such as Salt flat", autocomplete:"off"}); input.value = st.name;
+  input.oninput = () => { st.name = input.value; paintPreview(); };
+  paintPreview(); paintGlyphs(); paintColors();
+  f.append(preview, el("span",{class:"sub"},"Symbol"), gbox, el("span",{class:"sub"},"Color"), cbox, el("label",{for:"landName"},"Name"), input);
+  f.dataset.label = "Add land";
+  return f;
+}
+function landOptions(ids){
+  if (sheetForm === "other"){ sheet.append(landForm(ids)); return; }
+  const o = el("div",{class:"opts"});
+  const add = (key, name) => o.append(el("button",{type:"button", class:"opt", onclick:()=>applyAll(ids, id=>setField(id,"t",key), `${name} on ${ids.length} ${ids.length===1?"hex":"hexes"}.`)}, landIcon(key), name));
+  for (const [k,name] of LAND) add(k, name);
+  for (const [k,v] of customLand) add(k, v.name);
+  o.append(el("button",{type:"button", class:"opt other", onclick:()=>{ landForm.state = null; sheetForm="other"; renderSheet(); }}, "New land…"));
+  if (ids.some(id => (view(id)||{}).t)) o.append(el("button",{type:"button", class:"opt other", onclick:()=>applyAll(ids, id=>setField(id,"t",null), "Land cleared.")}, "Clear land"));
+  sheet.append(o);
+  // a river runs over land, so it only makes sense once there is land
+  if (ids.every(id => (view(id)||{}).t)){
+    const anyRiver = ids.some(id => (view(id)||{}).r), allRiver = ids.every(id => (view(id)||{}).r);
+    sheet.append(el("p",{class:"sub"},"River"), el("div",{class:"row"},
+      allRiver ? null : el("button",{type:"button", class:"btn", onclick:()=>applyAll(ids, id=>setField(id,"r",true), "River added.")}, "Add river"),
+      anyRiver ? el("button",{type:"button", class:"btn", onclick:()=>applyAll(ids, id=>setField(id,"r",null), "River removed.")}, "Remove river") : null));
+  }
+}
+function natureOptions(ids){
+  if (sheetForm === "other"){
+    sheet.append(otherForm("Name of the nature", false, async (nm) => {
+      await addCustom("nature", nm);
+      applyAll(ids, id => { const cur = (view(id)||{}).n || []; if (!cur.includes(nm)) setField(id,"n",[...cur,nm]); }, `Added ${nm}.`);
+    })); return;
+  }
+  const o = el("div",{class:"opts"});
+  const all = [...NATURES.map(x=>[x[0],x[1]]), ...[...customNat].map(n=>[n,"Custom nature"])];
+  for (const [nm,desc] of all){
+    o.append(el("button",{type:"button", class:"opt", title:desc, onclick:()=>applyAll(ids, id => { const cur = (view(id)||{}).n || []; if (!cur.includes(nm)) setField(id,"n",[...cur,nm]); }, `Added ${nm} to ${ids.length} ${ids.length===1?"hex":"hexes"}.`)}, nm));
+  }
+  o.append(el("button",{type:"button", class:"opt other", onclick:()=>{ sheetForm="other"; renderSheet(); }}, "Other…"));
+  sheet.append(el("p",{class:"note"}, "Natures add to what's already there."), o);
+  // natures present across the selection can be removed here too
+  const present = new Set(); for (const id of ids) for (const nm of (view(id)||{}).n || []) present.add(nm);
+  if (present.size){
+    const chips = el("div",{class:"chips"});
+    for (const nm of present) chips.append(el("span",{class:"chip"}, nm, el("button",{type:"button","aria-label":`Remove ${nm} from selected hexes`, onclick:()=>applyAll(ids, id => { const cur=(view(id)||{}).n||[]; if (cur.includes(nm)) setField(id,"n",cur.filter(x=>x!==nm)); }, `Removed ${nm}.`)}, "×")));
+    sheet.append(el("p",{class:"sub"},"Remove from these hexes"), chips);
+  }
+}
+function peopleOptions(ids){
+  if (sheetForm === "other"){
+    sheet.append(otherForm("Name of the people", true, async (nm, color) => {
+      const pid = await addPeople(nm, color);
+      applyAll(ids, id => setField(id,"p",pid), `Settled by ${nm}.`);
+    })); return;
+  }
+  const o = el("div",{class:"opts"});
+  for (const [pid,p] of peoples) o.append(el("button",{type:"button", class:"opt", onclick:()=>applyAll(ids, id=>setField(id,"p",pid), `Settled by ${p.name}.`)}, swatch(p.color), p.name));
+  o.append(el("button",{type:"button", class:"opt other", onclick:()=>{ sheetForm="other"; renderSheet(); }}, "New people…"));
+  o.append(el("button",{type:"button", class:"opt other", onclick:()=>applyAll(ids, id=>setField(id,"p",null), "No longer settled.")}, "Not settled"));
+  sheet.append(o);
+}
+function markerOptions(ids){
+  // fast path: kind, then a colour; no typing
+  const addMarker = (k, color) => { applyAll(ids, id => { const cur = (view(id)||{}).m || []; setField(id,"m",[...cur,{id:rid(), k, color}]); },
+    `${colorName(color)} ${MARKERS[k][0].toLowerCase()} placed.`); sheetCat = "Markers"; renderSheet(); };
+  const here = ids.length === 1 ? ((view(ids[0])||{}).m || []) : [];
+  // optional label, only when the player asks for it
+  if (sheetForm && sheetForm.startsWith("label:")){
+    const m = here.find(x => x.id === sheetForm.slice(6));
+    if (!m){ sheetForm = null; }
+    else {
+      const input = el("input",{id:"mkLabel", placeholder:"Optional, such as Vgd or 2nd host", autocomplete:"off", maxlength:"24"}); input.value = m.label || "";
+      const f = el("form",{class:"form", onsubmit:(e)=>{ e.preventDefault();
+        const v = input.value.trim(); snapshot();
+        setField(ids[0],"m", here.map(x => x.id === m.id ? (v ? {...x, label:v} : (({label, ...rest}) => rest)(x)) : x));
+        sheetForm = null; afterEdit(); toast(v ? "Label saved." : "Label removed."); }},
+        el("div",{class:"row"}, markerIcon(m.k, m.color, 32), el("strong",{}, markerName(m))),
+        el("label",{for:"mkLabel"}, "Label"), input);
+      f.dataset.label = "Save label";
+      sheet.append(f); setTimeout(() => input.focus(), 0); return;
+    }
+  }
+  if (sheetForm && MARKERS[sheetForm]){
+    const k = sheetForm, box = el("div",{class:"swatches", role:"group", "aria-label":`${MARKERS[k][0]} color`});
+    for (const [name,hex] of PALETTE) box.append(el("button",{type:"button", class:"swb", style:`background:${hex}`, "aria-label":`${name} ${MARKERS[k][0].toLowerCase()}`, onclick:()=>addMarker(k, hex)}));
+    sheet.append(el("div",{class:"row"}, markerIcon(k, "#e6c440", 32), el("span",{class:"sub"}, "Now tap a color to place it")), box);
+    return;
+  }
+  if (here.length){
+    const list = el("div",{class:"details"});
+    for (const m of here) list.append(el("div",{class:"mk"},
+      el("span",{class:"name"}, markerIcon(m.k, m.color), m.label ? el("span",{}, el("strong",{}, m.label), el("br"), el("span",{class:"note"}, markerName(m))) : markerName(m)),
+      el("button",{type:"button", class:"btn", "aria-label": m.label ? `Edit label ${m.label}` : `Add a label to the ${markerName(m).toLowerCase()}`, onclick:()=>{ sheetForm = "label:" + m.id; renderSheet(); }}, m.label ? "Label" : "+ Label"),
+      el("button",{type:"button", class:"btn", onclick:()=>{ moveState = {from:ids[0], mid:m.id, label: m.label || "the " + markerName(m).toLowerCase()}; renderSheet(); }}, "Move"),
+      el("button",{type:"button", class:"btn danger", onclick:()=>{ snapshot(); setField(ids[0],"m",here.filter(x=>x.id!==m.id)); afterEdit(); toast("Marker removed."); }}, "Remove")));
+    sheet.append(el("p",{class:"sub"},"On this hex"), list);
+  }
+  // markers already on the map, one tap to add another the same
+  const recent = new Map();
+  for (const d of base.values()) for (const m of d.m||[]) recent.set(m.k + m.color, m);
+  for (const p of draft.values()) for (const m of p.m||[]) recent.set(m.k + m.color, m);
+  if (recent.size){
+    const quick = el("div",{class:"swatches"});
+    for (const m of [...recent.values()].slice(-8).reverse()) quick.append(el("button",{type:"button", class:"opt", style:"min-width:48px;justify-content:center;padding:0 6px", "aria-label":`Add ${colorName(m.color)} ${MARKERS[m.k]?.[0].toLowerCase()}`, onclick:()=>addMarker(m.k, m.color)}, markerIcon(m.k, m.color)));
+    sheet.append(el("p",{class:"sub"},"Same again"), quick);
+  }
+  const o = el("div",{class:"opts"});
+  const shapes = el("div",{class:"swatches", role:"group", "aria-label":"New marker"});
+  for (const [k,[name]] of Object.entries(MARKERS)) shapes.append(el("button",{type:"button", class:"opt", style:"width:64px;height:64px;justify-content:center;padding:0", "aria-label":name, onclick:()=>{ sheetForm=k; renderSheet(); }}, markerIcon(k, "#e6c440")));
+  sheet.append(el("p",{class:"sub"},"New marker"), shapes);
+}
+function moveMarkerTo(to){
+  const {from, mid, label} = moveState; moveState = null;
+  if (to === from){ renderSheet(); return; }
+  const src = view(from) || {}, m = (src.m||[]).find(x=>x.id===mid);
+  if (!m){ renderSheet(); return; }
+  snapshot();
+  setField(from,"m",(src.m||[]).filter(x=>x.id!==mid));
+  setField(to,"m",[...((view(to)||{}).m||[]), m]);
+  selection.clear(); selection.add(to); sheetCat=null; afterEdit();
+  const [c,r] = parse(to); toast(`Moved ${label} to ${c+1}, ${r+1}.`); say(`Moved ${label}.`);
+}
+
+/* ================= draft bar + saving ================= */
+let confirmDiscard = false;
+function renderDraftBar(){
+  const bar = $("draftBar"), n = draft.size;
+  bar.hidden = !n || histIdx !== null || selection.size > 0; bar.textContent = "";
+  if (!n) { confirmDiscard = false; return; }
+  if (confirmDiscard){
+    bar.append(el("span",{class:"what"}, `Start over? This clears your ${n} ${n===1?"change":"changes"}.`),
+      el("button",{type:"button", class:"btn danger", onclick:()=>{ draft.clear(); undoStack.length = 0; confirmDiscard=false; saveDraftLocal(); renderDraftBar(); renderSheet(); draw(); toast("Cleared. Your post is empty again."); }}, "Start over"),
+      el("button",{type:"button", class:"btn", onclick:()=>{ confirmDiscard=false; renderDraftBar(); }}, "Keep"));
+    return;
+  }
+  bar.append(el("span",{class:"what"}, el("span",{class:"dot","aria-hidden":"true"}), `${n} ${n===1?"hex":"hexes"} changed · not published yet`),
+    el("button",{type:"button", class:"btn", disabled: !undoStack.length || null, onclick:undo}, "Undo"),
+    el("button",{type:"button", class:"btn", onclick:()=>{ confirmDiscard=true; renderDraftBar(); }}, "Start over"),
+    el("span",{class:"grow"}),
+    el("button",{type:"button", class:"btn primary", id:"saveBtn", onclick:savePost}, "Publish post"));
+}
+async function savePost(){
+  if (!draft.size) return;
+  const changes = Object.fromEntries(draft), post = {id: "p" + Date.now().toString(36) + rid().slice(0,4), by: myId || null, at: Date.now(), changes};
+  const btn = $("saveBtn"); if (btn) { btn.disabled = true; btn.textContent = "Publishing…"; }
+  if (db){
+    try { await db.doc("posts/"+post.id).set({by:post.by, at:post.at, changes}); }
+    catch(e){ if (btn){ btn.disabled=false; btn.textContent="Publish post"; } toast(e && e.code==="invalid_argument" ? "You can view this map but not change it." : "Couldn't publish. Your changes are kept; try again."); return; }
+  } else { posts.push(post); posts.sort((a,b)=>a.id<b.id?-1:1); base = fold(posts); }
+  draft.clear(); undoStack.length = 0; saveDraftLocal(); clearSelection(); renderDraftBar(); draw();
+  toast("Published. Everyone can see it now."); say("Post published.");
+}
+function saveDraftLocal(){ try { localStorage.setItem("soc-draft", JSON.stringify([...draft])); } catch(e){} }
+function loadDraftLocal(){ try { const v = JSON.parse(localStorage.getItem("soc-draft")||"[]"); for (const [k,p] of v) draft.set(k,p); } catch(e){} }
+
+/* ================= shared lists ================= */
+async function addCustom(kind, name, color, glyph){
+  const lc = name.toLowerCase();
+  if (kind === "land"){
+    for (const [k,v] of customLand) if (v.name.toLowerCase() === lc) return k;
+    const b = LAND.find(l => l[1].toLowerCase() === lc); if (b) return b[0];
+    const id = rid(); customLand.set("x-"+id, {name, color, glyph});
+    if (db) try { await db.doc("types/"+id).set({kind, name, color, glyph}); } catch(e){}
+    return "x-"+id;
+  }
+  const b = NATURES.find(n => n[0].toLowerCase() === lc); if (b) return b[0];
+  for (const n of customNat) if (n.toLowerCase() === lc) return n;
+  customNat.add(name);
+  if (db) try { await db.doc("types/"+rid()).set({kind, name}); } catch(e){}
+  return name;
+}
+async function addPeople(name, color){
+  for (const [pid,p] of peoples) if (p.name.toLowerCase() === name.toLowerCase()) return pid;
+  const pid = rid(); peoples.set(pid, {name, color});
+  if (db) try { await db.doc("peoples/"+pid).set({name, color}); } catch(e){}
+  return pid;
+}
+
+/* ================= modal: key, history, settings ================= */
+const modal = $("modal"); let lastFocus = null;
+function openModal(title, body){
+  $("hint").hidden = true;
+  lastFocus = document.activeElement; $("mTitle").textContent = title; const b = $("mBody"); b.textContent = ""; b.append(...[body].flat());
+  modal.hidden = false; $("mClose").focus();
+}
+function closeModal(){ modal.hidden = true; updateHint(); if (lastFocus && lastFocus.focus) lastFocus.focus(); }
+$("mClose").onclick = closeModal;
+modal.addEventListener("click", e => { if (e.target === modal) closeModal(); });
+document.addEventListener("keydown", e => { if (e.key === "Escape" && !modal.hidden) closeModal(); });
+
+function openKey(){
+  const out = [];
+  const usedLand = new Set(), usedNat = new Set(), markers = [];
+  const state = histIdx !== null ? histState : base;
+  for (const [id,d] of state){ if (d.t) usedLand.add(d.t); for (const n of d.n||[]) usedNat.add(n); for (const m of d.m||[]) markers.push([id,m]); }
+  const landList = el("div",{class:"keylist"});
+  for (const [k,name] of LAND) landList.append(el("div",{class:"keyrow"}, landIcon(k), name));
+  for (const [k,v] of customLand) landList.append(el("div",{class:"keyrow"}, landIcon(k), v.name));
+  landList.append(el("div",{class:"keyrow"}, swatch(RIVER_BLUE), "River, drawn as a line over any land"));
+  out.push(el("p",{class:"sub"},"Land"), landList);
+  const pl = el("div",{class:"keylist"});
+  if (peoples.size) for (const [,p] of peoples) pl.append(el("div",{class:"keyrow"}, swatch(p.color), p.name)); else pl.append(el("p",{class:"empty"},"No peoples yet."));
+  out.push(el("p",{class:"sub"},"Peoples"), pl);
+  const ml = el("div",{class:"keylist"});
+  for (const [k,[name]] of Object.entries(MARKERS)) ml.append(el("div",{class:"keyrow"}, markerIcon(k,"#e6c440"), name));
+  out.push(el("p",{class:"sub"},"Markers"), el("p",{class:"note"},"Markers have no set meaning. Your group decides what each symbol and color stands for."), ml);
+  if (markers.length){
+    const list = el("div",{class:"keylist"});
+    for (const [id,m] of markers){ const [c,r] = parse(id);
+      list.append(el("button",{type:"button", class:"link", onclick:()=>{ closeModal(); if (histIdx===null){ selection.clear(); selection.add(id); renderSheet(); } focusHex=[c,r]; V.k=Math.max(V.k,46/(SQ3*S)); const [x,y]=center(c,r); V.ox=W/2-x*V.k; V.oy=H/2-y*V.k; draw(); }},
+        markerIcon(m.k, m.color), `${MARKERS[m.k]?.[0]}${m.label?": "+m.label:""}`, el("span",{class:"when"}, `${c+1}, ${r+1}`))); }
+    out.push(el("p",{class:"sub"},"On the map"), list);
+  }
+  const nl = el("div",{class:"keylist"});
+  for (const [nm,desc] of NATURES) nl.append(el("div",{class:"keyrow"}, el("span",{}, el("strong",{}, nm), ` (${nm.slice(0,3)}) · ${desc}.`)));
+  for (const nm of customNat) nl.append(el("div",{class:"keyrow"}, el("span",{}, el("strong",{}, nm), ` (${nm.slice(0,3)}) · custom.`)));
+  out.push(el("p",{class:"sub"},"Natures (shown by their first three letters when zoomed in)"), nl);
+  openModal("Map key", out);
+};
+
+function nameOf(id){ return id ? (id === myId ? "You" : (names.get(id) || "A player")) : "A player"; }
+async function loadNames(ids){
+  if (!user || !user.profiles) return; const need = ids.filter(i => i && !names.has(i)); if (!need.length) return;
+  try { const ps = await user.profiles(need); for (const i of need) if (ps && ps[i] && ps[i].name) names.set(i, ps[i].name); } catch(e){}
+}
+const when = t => new Date(t).toLocaleString([], {month:"short", day:"numeric", hour:"numeric", minute:"2-digit"});
+async function openHistory(){
+  await loadNames([...new Set(posts.map(p=>p.by))]);
+  const list = el("div",{class:"keylist"});
+  if (!posts.length) list.append(el("p",{class:"empty"}, "No posts yet. Saved posts appear here, newest first."));
+  for (let i = posts.length-1; i >= 0; i--){
+    const p = posts[i], n = Object.keys(p.changes||{}).length;
+    list.append(el("button",{type:"button", class:"link", "aria-current": histIdx===i ? "true" : null, onclick:()=>{ showHistory(i); closeModal(); }},
+      el("strong",{}, nameOf(p.by)), `${n} ${n===1?"hex":"hexes"}`, el("span",{class:"when"}, when(p.at))));
+  }
+  openModal("History", [histIdx !== null ? el("button",{type:"button", class:"btn", onclick:()=>{ showHistory(null); closeModal(); }}, "Back to the map now") : null, list].filter(Boolean));
+};
+function showHistory(i){
+  histIdx = i;
+  if (i === null){ histState = null; $("histBanner").hidden = true; }
+  else { histState = fold(posts.slice(0,i+1)); const p = posts[i]; $("histText").textContent = `After ${nameOf(p.by)}'s post · ${when(p.at)}. Outlined hexes changed.`; $("histBanner").hidden = false; }
+  moveState = null; renderSheet(); renderDraftBar(); draw();
+}
+$("histBack").onclick = () => showHistory(null);
+
+function openWorld(){
+  const segs = el("div",{class:"segs"});
+  for (const a of [1,2,3]) segs.append(el("button",{type:"button", class:"btn", "aria-pressed":String(age===a), disabled: !canWrite || null, onclick: async ()=>{ age=a; renderAge(); closeModal(); if (db) try { await db.doc("world/meta").set({age, cols:COLS, rows:ROWS}); } catch(e){ toast("Couldn't save the age."); } }}, AGES[a][0]));
+  let cols = COLS, rows = ROWS;
+  const ci = el("input",{id:"cols", type:"number", min:"4", max:"80", value:String(COLS), inputmode:"numeric"}); ci.oninput = () => cols = +ci.value;
+  const ri = el("input",{id:"rows", type:"number", min:"4", max:"120", value:String(ROWS), inputmode:"numeric"}); ri.oninput = () => rows = +ri.value;
+  const size = el("form",{class:"form", onsubmit: async (e)=>{ e.preventDefault(); if (!(cols>=4 && cols<=80 && rows>=4 && rows<=120)) { toast("Use 4 to 80 across and 4 to 120 down."); return; } COLS=cols; ROWS=rows; fit(); closeModal(); if (db) try { await db.doc("world/meta").set({age, cols, rows}); } catch(e){} }},
+    el("label",{for:"cols"},"Hexes across"), ci, el("label",{for:"rows"},"Hexes down"), ri,
+    el("p",{class:"note"},"The default is 32 across and 53 down. Shrinking hides hexes outside the new edge; it doesn't erase them."),
+    canWrite ? el("div",{class:"row"}, el("button",{type:"submit", class:"btn primary"},"Change size")) : null);
+  openModal("The world", [el("p",{class:"sub"},"Current age"), segs, el("p",{class:"note"}, `In the ${AGES[age][0].toLowerCase()}, one area is ${AGES[age][1]} ${AGES[age][1]===1?"hex":"hexes"}.`), el("p",{class:"sub"},"Map size"), size]);
+};
+function renderAge(){ $("ageLabel").textContent = `${AGES[age][0]} · area ${AGES[age][1]}`; }
+$("menuBtn").onclick = () => {
+  const item = (title, sub, fn) => el("button",{type:"button", class:"link", style:"min-height:60px", onclick:()=>{ closeModal(); fn(); }},
+    el("span",{}, el("strong",{}, title), el("br"), el("span",{class:"note"}, sub)), el("span",{class:"when","aria-hidden":"true"}, "›"));
+  openModal("Menu", [
+    item("History", posts.length ? `${posts.length} published ${posts.length===1?"post":"posts"}` : "No posts yet", openHistory),
+    item("Key", "What the colors and symbols mean", openKey),
+    item("Age and map size", `${AGES[age][0]} · ${COLS} × ${ROWS} hexes`, openWorld)
+  ]);
+};
+
+/* ================= misc ================= */
+let toastT = 0;
+function toast(m){ const t = $("toast"); t.textContent = m; t.style.opacity = 1; clearTimeout(toastT); toastT = setTimeout(()=>t.style.opacity = 0, 2800); }
+function setReadOnly(){ canWrite = false; $("hint").hidden = true; selection.clear(); renderSheet(); renderDraftBar(); }
+
+// read-only hooks for the automated tests (tests/); nothing in the app uses them
+window.__soc = {
+  fold, merge, landInfo, center, edgeNeighbors, pick,
+  state: () => ({ selection:[...selection], draft:Object.fromEntries(draft), base:Object.fromEntries(base), posts, age, cols:COLS, rows:ROWS, adding, sheetCat }),
+  view: id => view(id)
+};
+window.__hexScreen = (c,r) => { const [x,y] = center(c,r); const b = canvas.getBoundingClientRect(); return [b.left + x*V.k+V.ox, b.top + y*V.k+V.oy]; }; // used by automated checks
+/* ================= boot ================= */
+loadDraftLocal(); renderAge(); renderDraftBar(); renderSheet();
+new ResizeObserver(resize).observe(stage);
+matchMedia("(prefers-color-scheme: dark)").addEventListener?.("change", draw);
+new MutationObserver(draw).observe(document.documentElement, {attributes:true, attributeFilter:["data-theme"]});
+
+(async () => {
+  const cl = window.claude;
+  if (!cl || !cl.use) { toast("Not connected: changes stay on this screen."); return; }
+  const [d, u] = await Promise.all([cl.use("db"), cl.use("user")]);
+  user = u;
+  if (u){ try { myId = await u.id(); } catch(e){} try { if (await u.can("data.write") === false) setReadOnly(); } catch(e){} }
+  if (!d){ toast("Not connected: changes stay on this screen."); return; }
+  db = d;
+  db.collection("posts").onSnapshot(snap => {
+    posts = snap.docs.map(x => ({id:x.id, ...x.data()})).sort((a,b) => a.id < b.id ? -1 : 1);
+    base = fold(posts);
+    // drop draft fields that now match the shared map
+    for (const [id,p] of [...draft]){ const b = base.get(id)||{}; for (const k of Object.keys(p)) if (same(b[k], p[k])) delete p[k]; if (!Object.keys(p).length) draft.delete(id); }
+    if (histIdx !== null){ if (histIdx >= posts.length) showHistory(null); else histState = fold(posts.slice(0,histIdx+1)); }
+    renderDraftBar(); renderSheet(); draw();
+  }, () => toast("Lost connection. Reload to see new posts."));
+  db.collection("types").onSnapshot(snap => {
+    customLand.clear(); customNat.clear();
+    for (const x of snap.docs){ const v = x.data(); if (v.kind === "land") customLand.set("x-"+x.id, {name:v.name, color:v.color||"#8f8a82", glyph:v.glyph}); else if (v.kind === "nature") customNat.add(v.name); }
+    draw(); if (sheetCat) renderSheet();
+  });
+  db.collection("peoples").onSnapshot(snap => { peoples.clear(); for (const x of snap.docs){ const v = x.data(); peoples.set(x.id, {name:v.name, color:v.color}); } draw(); if (sheetCat) renderSheet(); });
+  db.doc("world/meta").onSnapshot(s => {
+    if (!s.exists) return; const v = s.data();
+    if (AGES[v.age] && v.age !== age){ age = v.age; renderAge(); }
+    if (v.cols && v.rows && (v.cols !== COLS || v.rows !== ROWS)){ COLS = v.cols; ROWS = v.rows; fit(); }
+  });
+})();
+})();
+</script>
