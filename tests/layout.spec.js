@@ -61,7 +61,9 @@ test("the menu holds History, Key and Age, with no map-size control", async ({ a
   await app.page.getByRole("button", { name: "Close" }).click();
   await app.page.locator("#menuBtn").click();
   await app.page.locator("#mBody button.link", { hasText: "Key" }).click();
-  await expect(app.page.locator("#mBody")).toContainText("Markers have no set meaning");
+  await expect(app.page.locator("#mBody")).toContainText("Natures");
+  // markers have no fixed meaning, so they aren't in the key
+  await expect(app.page.locator("#mBody")).not.toContainText("Markers");
   await app.page.getByRole("button", { name: "Close" }).click();
   await expect(app.page.locator("#modal")).toBeHidden();
 });

@@ -981,9 +981,6 @@ document.addEventListener("keydown", e => { if (e.key === "Escape" && !modal.hid
 
 function openKey(){
   const out = [];
-  const usedLand = new Set(), usedNat = new Set(), markers = [];
-  const state = histIdx !== null ? histState : base;
-  for (const [id,d] of state){ if (d.t) usedLand.add(d.t); for (const n of d.n||[]) usedNat.add(n); for (const m of d.m||[]) markers.push([id,m]); }
   const landList = el("div",{class:"keylist"});
   for (const [k,name] of LAND) landList.append(el("div",{class:"keyrow"}, landIcon(k), name));
   for (const [k,v] of customLand) landList.append(el("div",{class:"keyrow"}, landIcon(k), v.name));
@@ -992,16 +989,6 @@ function openKey(){
   const pl = el("div",{class:"keylist"});
   if (peoples.size) for (const [,p] of peoples) pl.append(el("div",{class:"keyrow"}, swatch(p.color), p.name)); else pl.append(el("p",{class:"empty"},"No peoples yet."));
   out.push(el("p",{class:"sub"},"Peoples"), pl);
-  const ml = el("div",{class:"keylist"});
-  for (const [k,[name]] of Object.entries(MARKERS)) ml.append(el("div",{class:"keyrow"}, markerIcon(k,"#e6c440"), name));
-  out.push(el("p",{class:"sub"},"Markers"), el("p",{class:"note"},"Markers have no set meaning. Your group decides what each symbol and color stands for."), ml);
-  if (markers.length){
-    const list = el("div",{class:"keylist"});
-    for (const [id,m] of markers){ const [c,r] = parse(id);
-      list.append(el("button",{type:"button", class:"link", onclick:()=>{ closeModal(); if (histIdx===null){ selection.clear(); selection.add(id); renderSheet(); } focusHex=[c,r]; V.k=Math.max(V.k,46/(SQ3*S)); const [x,y]=center(c,r); V.ox=W/2-x*V.k; V.oy=H/2-y*V.k; draw(); }},
-        markerIcon(m.k, m.color), `${MARKERS[m.k]?.[0]}${m.label?": "+m.label:""}`, el("span",{class:"when"}, `${c+1}, ${r+1}`))); }
-    out.push(el("p",{class:"sub"},"On the map"), list);
-  }
   const nl = el("div",{class:"keylist"});
   for (const [nm,desc] of NATURES) nl.append(el("div",{class:"keyrow"}, el("span",{}, el("strong",{}, nm), ` (${nm.slice(0,3)}) · ${desc}.`)));
   for (const nm of customNat) nl.append(el("div",{class:"keyrow"}, el("span",{}, el("strong",{}, nm), ` (${nm.slice(0,3)}) · custom.`)));
