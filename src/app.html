@@ -701,9 +701,8 @@ function paint(){
         show.forEach((nm,i) => drawNature(ctx, nm, cx + (i-(n-1)/2)*gap, y, ns, ink, paper));
         if (nat.length > 3){ const x = cx + (n-1)/2*gap; ctx.font = `700 ${S*.26}px "Space Mono", monospace`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
           ctx.lineWidth = S*.1; ctx.strokeStyle = paper; ctx.strokeText(`+${nat.length-2}`, x, y); ctx.fillStyle = ink; ctx.fillText(`+${nat.length-2}`, x, y); }
-      } else if (px >= 9){                          // zoomed out: one ink tick says "this land has natures"
-        ctx.strokeStyle = ink; ctx.lineCap = "round"; ctx.lineJoin = "round"; ctx.lineWidth = Math.max(1.4*lw, S*.13);
-        ctx.beginPath(); ctx.moveTo(cx-S*.2, cy+S*.5); ctx.lineTo(cx-S*.04, cy+S*.66); ctx.lineTo(cx+S*.26, cy+S*.32); ctx.stroke();
+      } else if (px >= 18){                         // zoomed out: just the first nature, a little bigger, so it can still be read
+        drawNature(ctx, nat[0], cx, cy + S*.42, S*.5, ink, paper);
       }
     }
     const ms = d.m || []; if (!ms.length) continue;
@@ -788,7 +787,7 @@ canvas.addEventListener("pointerdown", e => {
     if (editing() && !moveState && e.button === 0){
       const g = G;
       g.hold = setTimeout(() => {               // hold a hex to add it to the selection
-        if (G !== g || g.moved || pts.size !== 1 || hexPx() < 30) return;
+        if (G !== g || g.moved || pts.size !== 1) return;
         const h = pick(...toWorld(g.sx, g.sy)); if (!h) return;
         g.type = "held"; try { navigator.vibrate && navigator.vibrate(12); } catch(err){}
         selectHex(hid(...h), true);
@@ -860,12 +859,11 @@ canvas.addEventListener("wheel", e => {
 
 function tap(sx, sy){
   const h = pick(...toWorld(sx,sy)); if (!h) return;
-  // zoomed out: select it and zoom in on it, so a slightly-off tap is easy to see and fix
-  if (hexPx() < 30) zoomAt(46/hexPx(), sx, sy);
   if (moveState){ moveMarkerTo(hid(...h)); return; }
   selectHex(hid(...h), false);
 }
 let reveal = null;
+let autoLand = false;     // the Land list was opened for us because the hex had no land yet
 function needsLand(ids){ return ids.length > 0 && ids.some(id => !(view(id)||{}).t); }
 let adding = false;
 let regrouping = false;
@@ -943,6 +941,7 @@ function afterSelect(id){
   // jump straight to land only when none of the selected hexes has land yet
   const sel = [...selection];
   sheetCat = canWrite && sel.length && sel.every(x => !(view(x)||{}).t) ? "Land" : null;
+  autoLand = sheetCat === "Land";
   reveal = id && selection.has(id) ? id : null; if (reveal){ ensureVisible(...parse(id)); }
   if (selection.size && !hinted){ hinted = true; try { localStorage.setItem("soc-hinted","1"); } catch(e){} }
   renderSheet(); draw();
@@ -1040,6 +1039,9 @@ function renderSheet(){
 const colorName = hex => (PALETTE.find(p => p[1]===hex) || ["Custom"])[0];
 const markerName = m => `${colorName(m.color)} ${(MARKERS[m.k]?.[0]||"marker").toLowerCase()}`;
 function fillSheet(){
+  // if land turns up after we jumped to the Land list (posts still loading, another player's post), go back to the overview
+  if (autoLand && sheetCat === "Land" && !sheetForm && [...selection].some(id => (view(id)||{}).t)) sheetCat = null;
+  if (sheetCat !== "Land") autoLand = false;
   const show = (selection.size > 0 || regrouping) && histIdx === null;
   sheet.hidden = !show;
   sheet.textContent = "";
