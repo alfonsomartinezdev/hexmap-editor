@@ -187,6 +187,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;-webkit-touch-call
 .sub{font-size:.72rem}
 .rowbtn .chev{font-family:var(--f-display);font-weight:700;font-size:1.6rem;color:var(--fg)}
 .rowbtn .rv canvas,.opt canvas{border:2px solid var(--line);border-radius:5px 8px 6px 7px}
+canvas.nat,.rowbtn .rv canvas.nat,.opt canvas.nat{border:0;border-radius:0;background:none}
 
 /* hand-lettered headings, with a marker squiggle under the dialog titles */
 .shead h2{font-family:var(--f-display);font-weight:700;font-size:1.6rem;line-height:1}
@@ -264,27 +265,31 @@ canvas{display:block;width:100%;height:100%;touch-action:none;-webkit-touch-call
 <script>
 (() => {
 /* ================= data ================= */
-const LAND = [ // broad terrain that fits any world; anything else is a custom land
-  ["desert","Desert","#dcc58a","dots"],["forest","Forest","#4a7a45","canopy"],["hills","Hills","#b09a63","hill"],
-  ["mountains","Mountains","#82796e","peak"],["grassland","Plains","#a9bb6c","grass"],["sea","Water","#2f5d86","waves"],
-  ["swamp","Wetland","#61714d","tuft"]
+const LAND = [ // broad terrain that fits any world; anything else is a custom land. Each has its own pen stroke.
+  ["desert","Desert","#dcc58a","dots"],["forest","Forest","#4a7a45","vertical"],["hills","Hills","#b09a63","scallops"],
+  ["mountains","Mountains","#82796e","cross"],["grassland","Plains","#a9bb6c","lines"],["sea","Water","#2f5d86","waves"],
+  ["swamp","Wetland","#61714d","dashes"]
 ];
 // retired defaults: still drawn if already on the map, no longer offered
-const RETIRED = [["shallows","Shallows","#5f97bb","ripple"],["river","River","#6aa6cf","river"],["glacier","Glacier","#e3edf3","flake"],
-  ["lake","Lake","#4a8cbc","ripple"],["jungle","Rainforest","#2d6a4f","canopies"],["volcano","Volcano","#7a3b33","cone"],
-  ["tundra","Tundra","#b8c4ba","dash"]];
-// symbols a custom land can use
+const RETIRED = [["shallows","Shallows","#5f97bb","waves"],["river","River","#6aa6cf","waves"],["glacier","Glacier","#e3edf3","rows"],
+  ["lake","Lake","#4a8cbc","waves"],["jungle","Rainforest","#2d6a4f","cross"],["volcano","Volcano","#7a3b33","back"],
+  ["tundra","Tundra","#b8c4ba","dashes"]];
+// the hatching a land is drawn with; land identity is color + pen, no symbol
+const PENS = [["lines","Lines"],["back","Back lines"],["cross","Crosshatch"],["vertical","Upright"],["rows","Rows"],
+  ["dots","Dots"],["waves","Waves"],["dashes","Dashes"],["scallops","Scallops"],["bricks","Bricks"]];
+const PEN_KEYS = PENS.map(x => x[0]);
+// custom lands made before pens existed had a symbol; give them the nearest pen
+const GLYPH_PEN = {waves:"waves", ripple:"waves", river:"waves", grass:"lines", canopy:"vertical", canopies:"vertical", tree:"vertical", trees:"vertical",
+  tuft:"dashes", hill:"scallops", peak:"cross", dots:"dots", dash:"rows", flake:"bricks", cone:"back"};
+// symbols a custom nature can use (the old land symbols, freed up)
 const GLYPHS = [["waves","Waves"],["ripple","Ripple"],["grass","Grass"],["canopy","Tree"],["canopies","Trees"],["tuft","Reeds"],
   ["hill","Hill"],["peak","Peak"],["dots","Sand"],["dash","Frost"],["flake","Flake"],["cone","Volcano"]];
 const LAND_COLORS = [["Deep blue","#2f5d86"],["Blue","#4a8cbc"],["Teal","#2f8a7e"],["Green","#4a7a45"],["Dark green","#2d6a4f"],["Olive","#61714d"],
   ["Sage","#a9bb6c"],["Sand","#dcc58a"],["Ochre","#b09a63"],["Stone","#82796e"],["Rust","#7a3b33"],["Frost","#b8c4ba"],["Snow","#e3edf3"],["Ash","#4b4f58"],["Violet","#6e5a8f"],["Rose","#b5677a"]];
-// each land color comes with its own pen stroke, so picking a color picks the hatching too
-const PENS = ["lines","back","cross","dots","waves","dashes"];
-const COLOR_PEN = {"#2f5d86":"waves","#4a8cbc":"waves","#2f8a7e":"dashes","#4a7a45":"lines","#2d6a4f":"cross","#61714d":"dashes",
-  "#a9bb6c":"lines","#dcc58a":"dots","#b09a63":"back","#82796e":"cross","#7a3b33":"dots","#b8c4ba":"dashes","#e3edf3":"dots",
-  "#4b4f58":"cross","#6e5a8f":"waves","#b5677a":"back"};
-function penOf(color){ const c = (color||"").toLowerCase(); if (COLOR_PEN[c]) return COLOR_PEN[c];
-  let h = 0; for (const ch of c) h = (h*31 + ch.charCodeAt(0)) >>> 0; return PENS[h % PENS.length]; }
+function penFor(def){                                    // a custom land's pen: chosen, else from its old symbol, else from its name
+  if (def.pen && PEN_KEYS.includes(def.pen)) return def.pen;
+  if (def.glyph && GLYPH_PEN[def.glyph]) return GLYPH_PEN[def.glyph];
+  let h = 0; for (const ch of (def.name||"") + (def.color||"")) h = (h*31 + ch.charCodeAt(0)) >>> 0; return PEN_KEYS[h % PEN_KEYS.length]; }
 const RIVER_BLUE = "#3f8fd0";
 const NATURES = [
   ["Baneful","Something in this land does harm to whatever stays"],["Burning","Something in this land is on fire"],
@@ -297,6 +302,10 @@ const NATURES = [
   ["Teeming","This land is full of living things"],["Veiled","This land is concealed or covered in something"],
   ["Wild","Nothing in this land has ever been tamed, and no two years of it are alike"]
 ];
+// each nature is drawn in ink with its own little symbol
+const NAT_GLYPH = {Baneful:"skull", Burning:"flame", Carved:"block", Deep:"down", Fading:"fade", Faithful:"rings", Frozen:"snow",
+  Hungry:"jaws", Lavish:"bowl", Quickening:"sprout", Radiant:"sun", Roaring:"roar", Skyward:"up", Still:"pause", Tangled:"tangle",
+  Teeming:"swarm", Veiled:"eyelid", Wild:"spiral"};
 const MARKERS = {legend:["Dot","dot"], city:["Star","star"], army:["Square","square"], wonder:["Diamond","diamond"],
   tri:["Triangle","tri"], ring:["Ring","ring"], cross:["Cross","cross"], moon:["Crescent","moon"], flag:["Flag","flag"]}; // meaning is up to the players
 const PALETTE = [["Crimson","#c8323c"],["Amber","#e0912f"],["Gold","#e6c440"],["Leaf","#4caf50"],["Teal","#1fa39a"],["Sky","#3d9be0"],
@@ -310,7 +319,7 @@ const draft = new Map();        // hexId -> patch, private until saved
 const selection = new Set();
 let histIdx = null, histState = null;
 const customLand = new Map();   // key "x-<id>" -> {name,color}
-const customNat = new Set();
+const customNat = new Map();    // name -> symbol
 const peoples = new Map();      // id -> {name,color}
 const undoStack = [];
 let hinted = false;
@@ -333,9 +342,9 @@ const rid = () => Math.random().toString(36).slice(2,10);
 
 function landInfo(t){
   if (!t) return null;
-  const b = LAND.find(l => l[0]===t) || RETIRED.find(l => l[0]===t); if (b) return {name:b[1], color:b[2], glyph:b[3]};
-  const c = customLand.get(t); if (c) return {name:c.name, color:c.color, glyph:c.glyph || "letter"};
-  return {name:"Other land", color:"#8f8a82", glyph:"letter"};
+  const b = LAND.find(l => l[0]===t) || RETIRED.find(l => l[0]===t); if (b) return {name:b[1], color:b[2], pen:b[3]};
+  const c = customLand.get(t); if (c) return {name:c.name, color:c.color, pen:penFor(c), glyph:c.glyph};
+  return {name:"Other land", color:"#8f8a82", pen:"lines"};
 }
 function merge(a, p){
   if (!p) return a || null;
@@ -359,7 +368,7 @@ function wire(changes){
 // custom lands, peoples and the age travel inside posts; replay them in order
 function applyDefs(list){
   for (const p of list){
-    for (const [id,t] of Object.entries(p.types || {})){ if (t.kind === "land") customLand.set("x-"+id, {name:t.name, color:t.color||"#8f8a82", glyph:t.glyph}); else if (t.name) customNat.add(t.name); }
+    for (const [id,t] of Object.entries(p.types || {})){ if (t.kind === "land") customLand.set("x-"+id, {name:t.name, color:t.color||"#8f8a82", pen:t.pen, glyph:t.glyph}); else if (t.name) customNat.set(t.name, t.glyph || customNat.get(t.name) || null); }
     for (const [id,v] of Object.entries(p.peoples || {})) peoples.set(id, {name:v.name, color:v.color});
     if (p.world){ if (AGES[p.world.age]) age = p.world.age; if (p.world.cols && p.world.rows){ COLS = p.world.cols; ROWS = p.world.rows; } }
   }
@@ -441,18 +450,18 @@ function roughHex(cx,cy,s,seed,amt){
 const seedOf = (c,r) => c*92.7 + r*37.3;
 function lum(hex){ const n=parseInt(hex.slice(1),16); return (0.299*(n>>16)+0.587*((n>>8)&255)+0.114*(n&255))/255; }
 const inkFor = color => lum(color) < 0.55 ? "rgba(255,255,255,.85)" : "rgba(20,24,34,.75)";
-/* ---- marker-on-paper land: a light wash with hatching on top; the pen stroke comes from the color, never the terrain ---- */
+/* ---- marker-on-paper land: a light wash of the land's color with its own pen stroke on top ---- */
 function hexToRgb(h){ const n = parseInt(h.slice(1),16); return [n>>16, (n>>8)&255, n&255]; }
 function mixHex(a, b, t){ const A = hexToRgb(a), B = hexToRgb(b); return "#" + A.map((v,i) => Math.round(v*(1-t) + B[i]*t).toString(16).padStart(2,"0")).join(""); }
 const patCache = new Map();
 function washOf(color){ return isDark() ? mixHex(color, "#1d2220", .35) : mixHex(color, "#f1f0ea", .45); }
-// one 120px seamless tile per color: a wash of the color with that color's pen strokes on top
+// one 120px seamless tile per color and pen
 const tileCache = new Map();
-function hatchTile(color){
-  const key = color + "|" + (isDark() ? "d" : "l");
+function hatchTile(color, pen){
+  const key = color + "|" + pen + "|" + (isDark() ? "d" : "l");
   if (tileCache.has(key)) return tileCache.get(key);
   const N = 120, cv = document.createElement("canvas"); cv.width = cv.height = N;
-  const c = cv.getContext("2d"), pen = penOf(color);
+  const c = cv.getContext("2d");
   c.fillStyle = washOf(color); c.fillRect(0,0,N,N);
   c.strokeStyle = c.fillStyle = isDark() ? mixHex(color, "#f3f0e6", .22) : mixHex(color, "#141414", .22);
   c.lineCap = "round"; c.lineWidth = 4.2; c.globalAlpha = .9;
@@ -466,19 +475,25 @@ function hatchTile(color){
   else if (pen === "cross"){ diag(1, .9); diag(-1, .5); }
   else if (pen === "dots"){ for (let y = 7.5; y < N; y += 15) for (let x = ((y-7.5)/15 % 2) * 7.5 + 3.75; x < N; x += 15){ c.beginPath(); c.arc(x + wob(x*7+y)*2.5, y + wob(x+y*3)*2.5, 2.4, 0, Math.PI*2); c.fill(); } }
   else if (pen === "waves"){ for (let y = 10; y < N; y += 20){ c.beginPath(); for (let x = 0; x <= N; x += 2) c.lineTo(x, y + Math.sin(x/N*Math.PI*4)*4); c.stroke(); } }
+  else if (pen === "vertical"){ for (let k = 0, x = 7.5; x < N; x += 15, k++){ c.beginPath(); c.moveTo(x, 0); c.quadraticCurveTo(x + wob(k)*5, N/2, x, N); c.stroke(); } }
+  else if (pen === "rows"){ for (let k = 0, y = 7.5; y < N; y += 15, k++){ c.beginPath(); c.moveTo(0, y); c.quadraticCurveTo(N/2, y + wob(k+3)*5, N, y); c.stroke(); } }
+  else if (pen === "scallops"){ for (let y = 14, row = 0; y < N; y += 20, row++) for (let x = (row % 2) * 10; x < N + 20; x += 20){ c.beginPath(); c.arc(x, y, 7, Math.PI*1.08, Math.PI*1.92); c.stroke(); } }
+  else if (pen === "bricks"){ for (let y = 10, row = 0; y < N; y += 20, row++){ c.beginPath(); c.moveTo(0, y); c.lineTo(N, y);
+      for (let x = (row % 2) * 15; x < N; x += 30){ c.moveTo(x, y); c.lineTo(x, y + 20 > N ? N : y + 20); } c.stroke(); }
+    c.beginPath(); for (let x = 15; x < N; x += 30){ c.moveTo(x, 0); c.lineTo(x, 10); } c.stroke(); }
   else { for (let y = 7.5, row = 0; y < N; y += 15, row++) for (let x = (row % 2) * 12; x < N + 12; x += 24){ c.beginPath(); c.moveTo(x, y + wob(x+y)*2); c.lineTo(x + 12, y + wob(x*3+y)*2); c.stroke(); } }
   tileCache.size > 60 && tileCache.clear(); tileCache.set(key, cv); return cv;
 }
 function landFill(L){
-  const key = L.color + "|" + (isDark() ? "d" : "l");
+  const key = L.color + "|" + L.pen + "|" + (isDark() ? "d" : "l");
   if (patCache.has(key)) return patCache.get(key);
-  const pat = ctx.createPattern(hatchTile(L.color), "repeat");
+  const pat = ctx.createPattern(hatchTile(L.color, L.pen), "repeat");
   pat.setTransform(new DOMMatrix().scale(15 / 120));                // one tile = 15 map units, about one hex
   patCache.set(key, pat); return pat;
 }
 // the same hatching for the little tiles in menus and pickers
-function hatchOn(c2, color, d){ const pat = c2.createPattern(hatchTile(color), "repeat"); pat.setTransform(new DOMMatrix().scale(d / 120)); c2.fillStyle = pat; c2.fillRect(0,0,d,d); }
-const hatchURL = color => { const t = hatchTile(color); return t._url || (t._url = t.toDataURL()); };
+function hatchOn(c2, color, pen, d){ const pat = c2.createPattern(hatchTile(color, pen), "repeat"); pat.setTransform(new DOMMatrix().scale(d / 120)); c2.fillStyle = pat; c2.fillRect(0,0,d,d); }
+const hatchURL = (color, pen) => { const t = hatchTile(color, pen); return t._url || (t._url = t.toDataURL()); };
 
 function glyph(g, cx, cy, s, ink, label, c2){
   const C = c2 || ctx;
@@ -503,6 +518,47 @@ function glyph(g, cx, cy, s, ink, label, c2){
     default: C.font = `700 ${s*0.7}px "Atkinson Hyperlegible", sans-serif`; C.textAlign="center"; C.textBaseline="middle"; C.fillText((label||"?").slice(0,1).toUpperCase(), cx, cy+s*.02);
   }
 }
+// nature symbols: plain ink line drawings, so they never look like the colored marker pieces
+function natSymbol(C, g, cx, cy, s, label){
+  const u = s*0.5, P = (pts, close) => { pts.forEach(([a,b],i) => i ? C.lineTo(cx+a*u, cy+b*u) : C.moveTo(cx+a*u, cy+b*u)); if (close) C.closePath(); };
+  const arc = (x,y,r,a0,a1,ccw) => { C.moveTo(cx+x*u + r*u*Math.cos(a0), cy+y*u + r*u*Math.sin(a0)); C.arc(cx+x*u, cy+y*u, r*u, a0, a1, ccw); };
+  const dot = (x,y,r) => { C.moveTo(cx+x*u+r*u, cy+y*u); C.arc(cx+x*u, cy+y*u, r*u, 0, Math.PI*2); };
+  C.beginPath();
+  switch(g){
+    case "skull": arc(0,-.15,.62,Math.PI*.8,Math.PI*.2); P([[.42,.3],[.36,.75],[-.36,.75],[-.42,.3]]); C.closePath(); dot(-.24,-.12,.12); dot(.24,-.12,.12); break;
+    case "flame": C.moveTo(cx, cy-u*.95); C.bezierCurveTo(cx+u*.75, cy-u*.2, cx+u*.75, cy+u*.85, cx, cy+u*.85); C.bezierCurveTo(cx-u*.75, cy+u*.85, cx-u*.75, cy-u*.1, cx-u*.15, cy-u*.35); C.quadraticCurveTo(cx-u*.05, cy-u*.05, cx, cy-u*.95); break;
+    case "block": P([[-.7,-.35],[0,-.75],[.7,-.35],[.7,.45],[0,.85],[-.7,.45]], true); P([[-.7,-.35],[0,.05],[.7,-.35]]); P([[0,.05],[0,.85]]); break;
+    case "down": P([[-.7,-.6],[0,0],[.7,-.6]]); P([[-.7,0],[0,.6],[.7,0]]); break;
+    case "up": P([[-.7,.6],[0,0],[.7,.6]]); P([[-.7,0],[0,-.6],[.7,0]]); break;
+    case "fade": P([[-.85,0],[-.3,0]]); P([[-.05,0],[.3,0]]); P([[.55,0],[.7,0]]); break;
+    case "rings": arc(-.28,0,.5,0,Math.PI*2); arc(.28,0,.5,0,Math.PI*2); break;
+    case "snow": for (let i=0;i<3;i++){ const a = Math.PI/3*i + Math.PI/2, x = Math.cos(a), y = Math.sin(a); P([[-x*.85,-y*.85],[x*.85,y*.85]]); } break;
+    case "jaws": arc(0,0,.75,Math.PI*.22,Math.PI*1.78); P([[.6,-.45],[0,0],[.6,.45]]); P([[.2,-.12],[.32,.0],[.2,.12]]); break;
+    case "bowl": C.moveTo(cx-u*.8, cy); C.quadraticCurveTo(cx, cy+u*1.25, cx+u*.8, cy); C.closePath(); dot(-.35,-.38,.14); dot(0,-.62,.14); dot(.35,-.38,.14); break;
+    case "sprout": P([[0,.85],[0,-.2]]); C.moveTo(cx, cy-u*.05); C.quadraticCurveTo(cx-u*.85, cy-u*.15, cx-u*.65, cy-u*.8); C.quadraticCurveTo(cx-u*.1, cy-u*.65, cx, cy-u*.05);
+      C.moveTo(cx, cy+u*.25); C.quadraticCurveTo(cx+u*.85, cy+u*.2, cx+u*.7, cy-u*.45); C.quadraticCurveTo(cx+u*.1, cy-u*.4, cx, cy+u*.25); break;
+    case "sun": dot(0,0,.36); for (let i=0;i<8;i++){ const a = Math.PI/4*i, x = Math.cos(a), y = Math.sin(a); P([[x*.58,y*.58],[x*.92,y*.92]]); } break;
+    case "roar": dot(-.55,0,.14); for (const r of [.45,.8]) arc(-.55,0,r+.1,-Math.PI/4,Math.PI/4); arc(-.55,0,1.25,-Math.PI/5,Math.PI/5); break;
+    case "pause": P([[-.32,-.65],[-.32,.65]]); P([[.32,-.65],[.32,.65]]); break;
+    case "tangle": C.moveTo(cx-u*.9, cy+u*.3); C.bezierCurveTo(cx-u*.2, cy+u*1.2, cx-u*.1, cy-u*1.1, cx-u*.4, cy-u*.2); C.bezierCurveTo(cx-u*.6, cy+u*.6, cx+u*.6, cy+u*.7, cx+u*.3, cy-u*.3);
+      C.bezierCurveTo(cx+u*.1, cy-u*.9, cx+u*.9, cy-u*.6, cx+u*.9, cy+u*.2); break;
+    case "swarm": for (const [x,y] of [[-.55,-.4],[.1,-.6],[.6,-.15],[-.2,.15],[.35,.55],[-.6,.5]]) dot(x,y,.15); break;
+    case "eyelid": C.moveTo(cx-u*.85, cy-u*.1); C.quadraticCurveTo(cx, cy+u*.7, cx+u*.85, cy-u*.1); for (const x of [-.45,0,.45]) P([[x, x ? .22 : .32],[x*1.25, .65]]); break;
+    case "spiral": { C.moveTo(cx, cy); for (let t = 0; t <= Math.PI*4.2; t += .25){ const r = u*.08 + u*.16*t/Math.PI; C.lineTo(cx + r*Math.cos(t), cy + r*Math.sin(t)); } break; }
+    default:
+      if (g && g !== "letter") { C.closePath(); glyph(g, cx, cy, s*1.25, C.strokeStyle, label, C); return; }
+      C.font = `700 ${s*.85}px "Atkinson Hyperlegible", sans-serif`; C.textAlign = "center"; C.textBaseline = "middle"; C.fillText((label||"?").slice(0,1).toUpperCase(), cx, cy + s*.04); return;
+  }
+  if (g === "swarm") C.fill();
+  C.stroke();
+}
+const natGlyphOf = nm => NAT_GLYPH[nm] || customNat.get(nm) || "letter";
+// ink with a paper halo, so a symbol stays readable over any hatching
+function drawNature(C, nm, x, y, s, inkC, paper){
+  const g = natGlyphOf(nm); C.lineCap = "round"; C.lineJoin = "round";
+  C.strokeStyle = paper; C.fillStyle = paper; C.lineWidth = s*.34; natSymbol(C, g, x, y, s, nm);
+  C.strokeStyle = inkC; C.fillStyle = inkC; C.lineWidth = s*.12; natSymbol(C, g, x, y, s, nm);
+}
 function shapePath(C, shape, x, y, r){
   const poly = pts => { pts.forEach(([a,b],i) => i ? C.lineTo(x+a*r,y+b*r) : C.moveTo(x+a*r,y+b*r)); C.closePath(); };
   C.beginPath();
@@ -518,12 +574,17 @@ function shapePath(C, shape, x, y, r){
     default: { for (let i=0;i<10;i++){ const a=-Math.PI/2+i*Math.PI/5, rr=i%2?.45:1; i?C.lineTo(x+rr*r*Math.cos(a),y+rr*r*Math.sin(a)):C.moveTo(x+rr*r*Math.cos(a),y+rr*r*Math.sin(a)); } C.closePath(); }
   }
 }
-function marker(shape, x, y, r, color){
-  shapePath(ctx, shape, x, y, r);
-  ctx.fillStyle = color; ctx.fill("evenodd");
-  ctx.lineWidth = r*.22; ctx.strokeStyle = lum(color) > .6 ? "#1a1d26" : "#ffffff"; ctx.stroke();
-  ctx.lineWidth = r*.08; ctx.strokeStyle = "#1a1d26"; ctx.stroke();
+// markers are pieces sitting on the map: solid color, a thick ink outline and a hard shadow
+function marker(shape, x, y, r, color, inkC){
+  const off = r*.2;
+  shapePath(ctx, shape, x + off, y + off, r); ctx.fillStyle = inkC; ctx.fill("evenodd");
+  ctx.lineJoin = "round"; ctx.lineWidth = r*.2; ctx.strokeStyle = inkC; ctx.stroke();
+  shapePath(ctx, shape, x, y, r); ctx.fillStyle = color; ctx.fill("evenodd");
+  ctx.lineWidth = r*.2; ctx.strokeStyle = inkC; ctx.stroke();
 }
+// where the pieces go: one in the middle, then pairs, a triangle, a square; more than four shows three and a count
+const MARKER_SPOTS = {1:[[0,-.12]], 2:[[-.36,-.12],[.36,-.12]], 3:[[-.34,-.3],[.34,-.3],[0,.12]], 4:[[-.31,-.3],[.31,-.3],[-.31,.12],[.31,.12]]};
+const MARKER_R = {1:.36, 2:.27, 3:.24, 4:.21};
 function paint(){
   raf = 0;
   ctx.setTransform(DPR,0,0,DPR,0,0); ctx.fillStyle = css("--void"); ctx.fillRect(0,0,W,H);
@@ -541,7 +602,7 @@ function paint(){
       if (px > 9){ ctx.strokeStyle = isDark() ? "rgba(243,240,230,.18)" : "rgba(20,20,20,.16)"; ctx.lineWidth = Math.max(lw, S*.025); ctx.lineJoin = "round"; ctx.stroke(); } }
     else { hexPath(cx,cy,S+.03); ctx.fillStyle = unmade; ctx.fill();
       if (px > 9){ roughHex(cx,cy,S*.97,seedOf(c,r),.05); ctx.strokeStyle = grid; ctx.lineWidth = lw; ctx.stroke(); } }
-    if (L && px >= 16 && !(d.m && d.m.length)) glyph(L.glyph, cx, cy - (px>=40 ? S*.25 : 0), S, ink, L.name);
+    if (selection.has(id)){ roughHex(cx,cy,S*.96,seedOf(c,r)+5,.05); ctx.fillStyle = sel; ctx.fill(); }
     if (d) cells.push([c,r,cx,cy,d,L]);
   }
   // ink the coastlines: a bold marker line wherever one terrain meets another or the empty page
@@ -579,7 +640,7 @@ function paint(){
   for (const [c,r,cx,cy,d] of cells){
     if (!d.r) continue;
     const links = [];
-    for (const [nc,nr] of edgeNeighbors(c,r)){ if (!inB(nc,nr)) continue; const nd = view(hid(nc,nr)); if (nd && (nd.r || nd.t==="sea" || nd.t==="lake" || (landInfo(nd.t)||{}).glyph==="waves" || (landInfo(nd.t)||{}).glyph==="ripple")) links.push(center(nc,nr)); }
+    for (const [nc,nr] of edgeNeighbors(c,r)){ if (!inB(nc,nr)) continue; const nd = view(hid(nc,nr)); if (nd && (nd.r || nd.t==="sea" || nd.t==="lake" || (landInfo(nd.t)||{}).pen==="waves")) links.push(center(nc,nr)); }
     ctx.lineCap = "round"; ctx.lineJoin = "round";
     for (const pass of [0,1]){
       ctx.strokeStyle = pass ? RIVER_BLUE : "rgba(10,20,40,.55)"; ctx.lineWidth = pass ? Math.max(2*lw, S*.2) : Math.max(3.5*lw, S*.32);
@@ -590,27 +651,33 @@ function paint(){
       ctx.stroke();
     }
   }
-  // natures and markers
+  // natures in ink along the bottom of the hex; markers as pieces in the middle
   for (const [c,r,cx,cy,d,L] of cells){
-    const nat = d.n || [], ink = L ? inkFor(washOf(L.color)) : fg;
+    const nat = d.n || [], paper = L ? washOf(L.color) : unmade;
     if (nat.length){
-      if (px >= 40){ ctx.fillStyle = ink; ctx.font = `700 ${S*.34}px "Atkinson Hyperlegible", sans-serif`; ctx.textAlign="center"; ctx.textBaseline="middle";
-        ctx.fillText(nat.slice(0,2).map(n=>n.slice(0,3)).join(" ") + (nat.length>2?" +":""), cx, cy+S*.48); }
-      else if (px >= 9){ ctx.fillStyle = ink; ctx.beginPath(); ctx.arc(cx+S*.5,cy+S*.45,S*.11,0,Math.PI*2); ctx.fill(); }
+      if (px >= 30){
+        const show = nat.length > 3 ? nat.slice(0,2) : nat, n = show.length + (nat.length > 3 ? 1 : 0), gap = nat.length > 3 ? S*.44 : S*.5, ns = S*.38, y = cy + S*.58;
+        show.forEach((nm,i) => drawNature(ctx, nm, cx + (i-(n-1)/2)*gap, y, ns, ink, paper));
+        if (nat.length > 3){ const x = cx + (n-1)/2*gap; ctx.font = `700 ${S*.26}px "Space Mono", monospace`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+          ctx.lineWidth = S*.1; ctx.strokeStyle = paper; ctx.strokeText(`+${nat.length-2}`, x, y); ctx.fillStyle = ink; ctx.fillText(`+${nat.length-2}`, x, y); }
+      } else if (px >= 9){                          // zoomed out: one ink tick says "this land has natures"
+        ctx.strokeStyle = ink; ctx.lineCap = "round"; ctx.lineJoin = "round"; ctx.lineWidth = Math.max(1.4*lw, S*.13);
+        ctx.beginPath(); ctx.moveTo(cx-S*.2, cy+S*.5); ctx.lineTo(cx-S*.04, cy+S*.66); ctx.lineTo(cx+S*.26, cy+S*.32); ctx.stroke();
+      }
     }
     const ms = d.m || []; if (!ms.length) continue;
-    const n = Math.min(ms.length, 3), r0 = S*(n>1?.3:.38);
-    ms.slice(0,3).forEach((m,i) => {
-      const x = cx + (i-(n-1)/2)*S*.62, y = cy - S*.05;
-      marker(MARKERS[m.k] ? MARKERS[m.k][1] : "dot", x, y, r0, m.color || "#e6c440");
-    });
-    if (ms.length > 3 && px >= 24){ ctx.fillStyle = fg; ctx.font = `700 ${S*.3}px sans-serif`; ctx.textAlign="center"; ctx.fillText(`+${ms.length-3}`, cx+S*.7, cy-S*.5); }
+    const over = ms.length > 4, k = over ? 4 : ms.length, spots = MARKER_SPOTS[k], r0 = S*MARKER_R[k];
+    ms.slice(0, over ? 3 : 4).forEach((m,i) => marker(MARKERS[m.k] ? MARKERS[m.k][1] : "dot", cx + spots[i][0]*S, cy + spots[i][1]*S, r0, m.color || "#e6c440", ink));
+    if (over){ const [sx,sy] = spots[3], x = cx + sx*S, y = cy + sy*S;
+      ctx.beginPath(); ctx.arc(x, y, r0*.95, 0, Math.PI*2); ctx.fillStyle = surface; ctx.fill(); ctx.lineWidth = r0*.16; ctx.strokeStyle = ink; ctx.stroke();
+      ctx.fillStyle = ink; ctx.font = `700 ${r0*.95}px "Space Mono", monospace`; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(`+${ms.length-3}`, x, y + r0*.04); }
     if (px >= 46){
-      const label = ms.length > 1 ? `${ms[0].label||""} +${ms.length-1}` : (ms[0].label||"");
-      if (label){ ctx.font = `700 ${S*.26}px "Atkinson Hyperlegible", sans-serif`; ctx.textAlign="center"; ctx.textBaseline="middle";
-        let t = label; while (t.length > 3 && ctx.measureText(t).width > S*1.4) t = t.slice(0,-2) + "…";
-        const w = ctx.measureText(t).width + S*.2, ty = cy - S*.56, h = S*.36;
-        ctx.fillStyle = surface; ctx.globalAlpha = .9; ctx.beginPath(); ctx.roundRect ? ctx.roundRect(cx-w/2, ty-h/2, w, h, h/2) : ctx.rect(cx-w/2, ty-h/2, w, h); ctx.fill(); ctx.globalAlpha = 1;
+      const labels = ms.filter(m => m.label), label = labels.length ? labels[0].label + (labels.length > 1 ? ` +${labels.length-1}` : "") : "";
+      if (label){ ctx.font = `700 ${S*.24}px "Atkinson Hyperlegible", sans-serif`; ctx.textAlign="center"; ctx.textBaseline="middle";
+        let t = label; while (t.length > 3 && ctx.measureText(t).width > S*.85) t = t.slice(0,-2) + "…";
+        const w = ctx.measureText(t).width + S*.2, ty = cy - S*.72, h = S*.3;
+        ctx.fillStyle = surface; ctx.beginPath(); ctx.roundRect ? ctx.roundRect(cx-w/2, ty-h/2, w, h, h/2) : ctx.rect(cx-w/2, ty-h/2, w, h); ctx.fill();
+        ctx.lineWidth = Math.max(lw, S*.03); ctx.strokeStyle = ink; ctx.stroke();
         ctx.fillStyle = fg; ctx.fillText(t, cx, ty + S*.01); }
     }
   }
@@ -634,7 +701,7 @@ function paint(){
   }
   for (const id of selection){
     const [c,r] = parse(id); const [cx,cy] = center(c,r); if (!vis(cx,cy)) continue;
-    roughHex(cx,cy,S*.96,seedOf(c,r)+5,.05); ctx.fillStyle = sel; ctx.fill();
+    roughHex(cx,cy,S*.96,seedOf(c,r)+5,.05);
     ctx.strokeStyle = accent; ctx.lineJoin = "round"; ctx.lineWidth = Math.max(2*lw, S*.09); ctx.stroke();
     roughHex(cx,cy,S*.93,seedOf(c,r)+11,.07); ctx.lineWidth = Math.max(1.2*lw, S*.045); ctx.stroke();
   }
@@ -863,8 +930,18 @@ function el(tag, attrs={}, ...kids){
 function landIcon(t){
   const L = landInfo(t), cv = document.createElement("canvas"), d = 56; cv.width = d; cv.height = d;
   cv.style.cssText = "width:28px;height:28px;flex:0 0 28px;display:block";
-  const c2 = cv.getContext("2d"); hatchOn(c2, L.color, d);
-  glyph(L.glyph, d/2, d/2, d*.55, css("--line"), L.name, c2); cv.setAttribute("aria-hidden","true"); return cv;
+  const c2 = cv.getContext("2d"); hatchOn(c2, L.color, L.pen, d); cv.setAttribute("aria-hidden","true"); return cv;
+}
+function natIcon(nm, px = 26){
+  const cv = document.createElement("canvas"), d = 56; cv.width = d; cv.height = d; cv.setAttribute("aria-hidden","true"); cv.className = "nat";
+  cv.style.cssText = `width:${px}px;height:${px}px;flex:0 0 ${px}px;display:block`;
+  drawNature(cv.getContext("2d"), nm, d/2, d/2, d*.62, css("--line"), "rgba(0,0,0,0)"); return cv;
+}
+function symbolIcon(g, px = 26){
+  const cv = document.createElement("canvas"), d = 56; cv.width = d; cv.height = d; cv.setAttribute("aria-hidden","true");
+  cv.style.cssText = `width:${px}px;height:${px}px;display:block`;
+  const C = cv.getContext("2d"), ink = css("--line"); C.strokeStyle = ink; C.fillStyle = ink; C.lineWidth = d*.62*.12; C.lineCap = "round"; C.lineJoin = "round";
+  natSymbol(C, g, d/2, d/2, d*.62, "?"); return cv;
 }
 const swatch = color => el("span",{class:"sw", style:`background:${color}`, "aria-hidden":"true"});
 function markerIcon(k, color, px = 28){
@@ -956,7 +1033,7 @@ function rowsFor(ids){
   else land = [landIcon(ds[0].t), landInfo(ds[0].t).name];
   if (ds.some(d => d.r)) land.push(none(ds.every(d=>d.r) ? "· river" : "· some river"));
   const nats = [...new Set(ds.flatMap(d => d.n || []))];
-  const natV = noLand ? [none("Needs land first")] : nats.length ? [nats.join(", ")] : [none("None")];
+  const natV = noLand ? [none("Needs land first")] : nats.length ? [...nats.slice(0,4).map(nm => natIcon(nm, 22)), nats.join(", ")] : [none("None")];
   let ppl;
   if (noLand) ppl = [none("Needs land first")];
   else if (!allSame("p")) ppl = [none("Mixed")];
@@ -985,29 +1062,51 @@ function otherForm(label, withColor, onAdd){
   setTimeout(() => input.focus(), 0);
   return f;
 }
-function glyphTile(g, color, px){
+function penTile(color, pen, px){
   const cv = document.createElement("canvas"), d = 64; cv.width = d; cv.height = d; cv.setAttribute("aria-hidden","true");
   cv.style.cssText = `width:${px}px;height:${px}px;display:block;border-radius:8px`;
-  const c2 = cv.getContext("2d"); hatchOn(c2, color, d); glyph(g, d/2, d/2, d*.55, css("--line"), "?", c2);
-  return cv;
+  hatchOn(cv.getContext("2d"), color, pen, d); return cv;
+}
+// a land is told apart by its color and pen together; say when a new one would look like an existing one
+function lookalike(color, pen){
+  for (const [k,name,c,p] of LAND) if (c === color && p === pen) return name;
+  for (const [,v] of customLand) if (v.color === color && penFor(v) === pen) return v.name;
+  return null;
 }
 function landForm(ids){
-  const st = landForm.state || (landForm.state = {glyph:"hill", color:LAND_COLORS[8][1], name:""});
+  const used = new Set([...LAND.map(l => l[3]), ...[...customLand.values()].map(penFor)]);
+  const st = landForm.state || (landForm.state = {pen: PEN_KEYS.find(p => !used.has(p)) || "back", color:LAND_COLORS[8][1], name:""});
   const f = el("form",{class:"form", onsubmit:async (e)=>{ e.preventDefault();
     const nm = st.name.trim(); if (!nm){ input.focus(); toast("Give the land a name."); return; }
-    const key = await addCustom("land", nm, st.color, st.glyph); landForm.state = null;
+    const key = await addCustom("land", nm, st.color, st.pen); landForm.state = null;
     applyAll(ids, id => setField(id,"t",key), `${nm} on ${ids.length} ${ids.length===1?"hex":"hexes"}.`);
   }});
-  const preview = el("div",{class:"row"}); const paintPreview = () => { preview.textContent = ""; preview.append(glyphTile(st.glyph, st.color, 48), el("strong",{}, st.name.trim() || "New land")); };
-  const gbox = el("div",{class:"swatches", role:"group", "aria-label":"Symbol"});
-  const paintGlyphs = () => { gbox.textContent = ""; for (const [g,name] of GLYPHS){ const b = el("button",{type:"button", class:"swb", style:"border-radius:10px;overflow:hidden", "aria-label":name, "aria-pressed":String(st.glyph===g)}, glyphTile(g, st.color, 40)); b.onclick = () => { st.glyph = g; paintGlyphs(); paintPreview(); }; gbox.append(b); } };
+  const preview = el("div",{class:"row"}), warn = el("p",{class:"note", role:"status"});
+  const paintPreview = () => { preview.textContent = ""; preview.append(penTile(st.color, st.pen, 48), el("strong",{}, st.name.trim() || "New land"));
+    const twin = lookalike(st.color, st.pen); warn.textContent = twin ? `Looks just like ${twin}. Try another pen or color.` : ""; warn.hidden = !twin; };
+  const pbox = el("div",{class:"swatches", role:"group", "aria-label":"Pen"});
+  const paintPens = () => { pbox.textContent = ""; for (const [p,name] of PENS){ const b = el("button",{type:"button", class:"swb", style:"border-radius:10px;overflow:hidden", "aria-label":name, "aria-pressed":String(st.pen===p)}, penTile(st.color, p, 40)); b.onclick = () => { st.pen = p; paintPens(); paintColors(); paintPreview(); }; pbox.append(b); } };
   const cbox = el("div",{class:"swatches", role:"group", "aria-label":"Color"});
-  const paintColors = () => { cbox.textContent = ""; for (const [name,hex] of LAND_COLORS){ const b = el("button",{type:"button", class:"swb", style:`background:${hex} url(${hatchURL(hex)}) 0 0/100% 100%`, "aria-label":name, "aria-pressed":String(st.color===hex)}); b.onclick = () => { st.color = hex; paintColors(); paintGlyphs(); paintPreview(); }; cbox.append(b); } };
+  const paintColors = () => { cbox.textContent = ""; for (const [name,hex] of LAND_COLORS){ const b = el("button",{type:"button", class:"swb", style:`background:${hex} url(${hatchURL(hex, st.pen)}) 0 0/100% 100%`, "aria-label":name, "aria-pressed":String(st.color===hex)}); b.onclick = () => { st.color = hex; paintColors(); paintPens(); paintPreview(); }; cbox.append(b); } };
   const input = el("input",{id:"landName", placeholder:"Name, such as Salt flat", autocomplete:"off"}); input.value = st.name;
   input.oninput = () => { st.name = input.value; paintPreview(); };
-  paintPreview(); paintGlyphs(); paintColors();
-  f.append(preview, el("span",{class:"sub"},"Symbol"), gbox, el("span",{class:"sub"},"Color"), cbox, el("label",{for:"landName"},"Name"), input);
+  paintPreview(); paintPens(); paintColors();
+  f.append(preview, warn, el("span",{class:"sub"},"Pen"), pbox, el("span",{class:"sub"},"Color"), cbox, el("label",{for:"landName"},"Name"), input);
   f.dataset.label = "Add land";
+  return f;
+}
+// a new nature: a symbol, then a name
+function natureForm(onAdd){
+  const used = new Set(customNat.values());
+  const st = natureForm.state || (natureForm.state = {glyph: (GLYPHS.find(([g]) => !used.has(g)) || GLYPHS[0])[0], name:""});
+  const f = el("form",{class:"form", onsubmit:(e)=>{ e.preventDefault(); const v = st.name.trim(); if (!v){ input.focus(); toast("Give the nature a name."); return; } natureForm.state = null; onAdd(v, st.glyph); }});
+  const gbox = el("div",{class:"swatches", role:"group", "aria-label":"Symbol"});
+  const paint = () => { gbox.textContent = ""; for (const [g,name] of GLYPHS){ const b = el("button",{type:"button", class:"swb", style:"border-radius:10px;display:grid;place-items:center;background:var(--raise)", "aria-label":name, "aria-pressed":String(st.glyph===g)}, symbolIcon(g, 30)); b.onclick = () => { st.glyph = g; paint(); }; gbox.append(b); } };
+  const input = el("input",{id:"otherName", placeholder:"Name, such as Singing", autocomplete:"off"}); input.value = st.name;
+  input.oninput = () => { st.name = input.value; };
+  paint();
+  f.append(el("span",{class:"sub"},"Symbol"), gbox, el("label",{for:"otherName"},"Name"), input);
+  f.dataset.label = "Add";
   return f;
 }
 function landOptions(ids){
@@ -1035,19 +1134,19 @@ function natureOptions(ids){
     afterEdit(); say(`${nm} ${on ? "added" : "removed"}.`);
   };
   if (sheetForm === "other"){
-    sheet.append(otherForm("Name of the nature", false, async (nm) => {
-      const key = await addCustom("nature", nm); sheetForm = null; setNature(key, true);
+    sheet.append(natureForm(async (nm, g) => {
+      const key = await addCustom("nature", nm, null, g); sheetForm = null; setNature(key, true);
     })); return;
   }
   sheet.append(el("p",{class:"note"}, ids.length > 1 ? "Tap a nature to add it to every selected hex. Tap a checked one to remove it." : "Tap to add a nature. Tap a checked one to remove it."));
   const o = el("div",{class:"opts natures"});
-  const all = [...NATURES.map(x=>[x[0],x[1]]), ...[...customNat].map(n=>[n,"Custom nature"])];
+  const all = [...NATURES.map(x=>[x[0],x[1]]), ...[...customNat.keys()].map(n=>[n,"Custom nature"])];
   for (const [nm,desc] of all){
     const k = has(nm), state = k === 0 ? "false" : k === ids.length ? "true" : "mixed";
     o.append(el("button",{type:"button", class:"opt check", title:desc, "aria-pressed":state, onclick:()=>setNature(nm, state !== "true")},
-      el("span",{class:"tick","aria-hidden":"true"}, state === "true" ? "✓" : state === "mixed" ? "–" : ""), nm));
+      el("span",{class:"tick","aria-hidden":"true"}, state === "true" ? "✓" : state === "mixed" ? "–" : ""), natIcon(nm, 22), nm));
   }
-  o.append(el("button",{type:"button", class:"opt other", onclick:()=>{ sheetForm="other"; renderSheet(); }}, "New nature…"));
+  o.append(el("button",{type:"button", class:"opt other", onclick:()=>{ natureForm.state = null; sheetForm="other"; renderSheet(); }}, "New nature…"));
   sheet.append(o);
 }
 function peopleOptions(ids){
@@ -1185,19 +1284,19 @@ function loadDraftLocal(){
 }
 
 /* ================= shared lists ================= */
-async function addCustom(kind, name, color, glyph){
+async function addCustom(kind, name, color, look){
   const lc = name.toLowerCase();
   if (kind === "land"){
     for (const [k,v] of customLand) if (v.name.toLowerCase() === lc) return k;
     const b = LAND.find(l => l[1].toLowerCase() === lc); if (b) return b[0];
-    const id = rid(); customLand.set("x-"+id, {name, color, glyph});
-    draftDefs.types[id] = {kind, name, color, glyph}; saveDraftLocal();
+    const id = rid(); customLand.set("x-"+id, {name, color, pen:look});
+    draftDefs.types[id] = {kind, name, color, pen:look}; saveDraftLocal();
     return "x-"+id;
   }
   const b = NATURES.find(n => n[0].toLowerCase() === lc); if (b) return b[0];
-  for (const n of customNat) if (n.toLowerCase() === lc) return n;
-  customNat.add(name);
-  draftDefs.types[rid()] = {kind, name}; saveDraftLocal();
+  for (const n of customNat.keys()) if (n.toLowerCase() === lc) return n;
+  customNat.set(name, look || null);
+  draftDefs.types[rid()] = look ? {kind, name, glyph:look} : {kind, name}; saveDraftLocal();
   return name;
 }
 async function addPeople(name, color){
@@ -1231,9 +1330,9 @@ function openKey(){
   if (peoples.size) for (const [,p] of peoples) pl.append(el("div",{class:"keyrow"}, swatch(p.color), p.name)); else pl.append(el("p",{class:"empty"},"No peoples yet."));
   out.push(el("p",{class:"sub"},"Peoples"), pl);
   const nl = el("div",{class:"keylist"});
-  for (const [nm,desc] of NATURES) nl.append(el("div",{class:"keyrow"}, el("span",{}, el("strong",{}, nm), ` (${nm.slice(0,3)}) · ${desc}.`)));
-  for (const nm of customNat) nl.append(el("div",{class:"keyrow"}, el("span",{}, el("strong",{}, nm), ` (${nm.slice(0,3)}) · custom.`)));
-  out.push(el("p",{class:"sub"},"Natures (shown by their first three letters when zoomed in)"), nl);
+  for (const [nm,desc] of NATURES) nl.append(el("div",{class:"keyrow"}, natIcon(nm), el("span",{}, el("strong",{}, nm), ` · ${desc}.`)));
+  for (const nm of customNat.keys()) nl.append(el("div",{class:"keyrow"}, natIcon(nm), el("span",{}, el("strong",{}, nm), ` · custom.`)));
+  out.push(el("p",{class:"sub"},"Natures (drawn in ink along the bottom of a hex)"), nl);
   openModal("Map key", out);
 };
 
