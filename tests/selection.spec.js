@@ -14,6 +14,23 @@ test("a tap on the fitted map selects that hex without zooming", async ({ app })
   expect(Math.abs((b1 - a1) - (b0 - a0))).toBeLessThan(1);
 });
 
+test("a double tap zooms in there and keeps the hex selected", async ({ app }) => {
+  const [a0] = await app.at(16, 26), [b0] = await app.at(17, 26);
+  const [x, y] = await app.at(16, 26);
+  await app.page.touchscreen.tap(x, y); await app.page.waitForTimeout(60); await app.page.touchscreen.tap(x, y); await app.settle();
+  expect((await app.state()).selection).toEqual(["h16_26"]);
+  const [a1] = await app.at(16, 26), [b1] = await app.at(17, 26);
+  expect(b1 - a1).toBeGreaterThan((b0 - a0) * 1.8);
+});
+
+test("opening the sheet doesn't move the map", async ({ app }) => {
+  await app.zoomIn();
+  const before = await app.at(16, 22);
+  await app.tapHex(16, 22);
+  await expect(app.sheet()).toBeVisible();
+  expect(await app.at(16, 22)).toEqual(before);
+});
+
 test("the selected hex's coordinates show next to the title", async ({ app }) => {
   await app.zoomIn();
   await app.tapHex(16, 26);
@@ -106,9 +123,9 @@ test("with several hexes, ✕ deselects them all and the next taps build a new g
   await expect(app.sheet()).toBeVisible();
   await expect(app.heading()).toHaveText("Select hexes");
   await expect(app.page.locator("#draftBar")).toBeHidden();
-  await app.tapHex(20, 26);
-  await app.tapHex(19, 28);                           // adds, does not switch
-  expect((await app.state()).selection.sort()).toEqual(["h19_28", "h20_26"]);
+  await app.tapHex(20, 22);
+  await app.tapHex(19, 24);                           // adds, does not switch
+  expect((await app.state()).selection.sort()).toEqual(["h19_24", "h20_22"]);
   await app.done();
   expect((await app.state()).selection).toEqual([]);
   await expect(app.sheet()).toBeHidden();

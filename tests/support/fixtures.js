@@ -37,7 +37,7 @@ const test = base.extend({
       // the map shifts when the bottom sheet opens or closes; let that settle before aiming
       settle: () => page.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))),
       async at(c, r) { await app.settle(); return page.evaluate(([c, r]) => window.__hexScreen(c, r), [c, r]); },
-      async tapHex(c, r) { const [x, y] = await app.at(c, r); await page.touchscreen.tap(x, y); await page.waitForTimeout(60); },
+      async tapHex(c, r) { const [x, y] = await app.at(c, r); await page.touchscreen.tap(x, y); await page.waitForTimeout(340); },   // longer than a double tap
       async holdHex(c, r) {
         const [x, y] = await app.at(c, r);
         await page.mouse.move(x, y); await page.mouse.down(); await page.waitForTimeout(650); await page.mouse.up();
