@@ -110,7 +110,7 @@ test("a new nature is added and checked", async ({ app }) => {
 test("a new land that would look just like another one says so", async ({ app }) => {
   await app.tapHex(16, 26);
   await app.button("New land…").click();
-  await app.page.getByRole("button", { name: "Upright", exact: true }).click();
+  await app.page.getByRole("button", { name: "Trees", exact: true }).click();
   await app.page.getByRole("button", { name: "Green", exact: true }).click();
   await expect(app.page.locator("#sheet .note[role=status]")).toHaveText(/Looks just like Forest/);
   await app.page.getByRole("button", { name: "Dots", exact: true }).click();
