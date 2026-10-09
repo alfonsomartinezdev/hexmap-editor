@@ -577,14 +577,49 @@ function shapePath(C, shape, x, y, r){
     default: { for (let i=0;i<10;i++){ const a=-Math.PI/2+i*Math.PI/5, rr=i%2?.45:1; i?C.lineTo(x+rr*r*Math.cos(a),y+rr*r*Math.sin(a)):C.moveTo(x+rr*r*Math.cos(a),y+rr*r*Math.sin(a)); } C.closePath(); }
   }
 }
-// markers are pieces sitting on the map: solid color, a thick ink outline and a hard shadow
-function marker(shape, x, y, r, color, inkC){
-  const off = r*.2;
-  shapePath(ctx, shape, x + off, y + off, r); ctx.fillStyle = inkC; ctx.fill("evenodd");
-  ctx.lineJoin = "round"; ctx.lineWidth = r*.2; ctx.strokeStyle = inkC; ctx.stroke();
-  shapePath(ctx, shape, x, y, r); ctx.fillStyle = color; ctx.fill("evenodd");
-  ctx.lineWidth = r*.2; ctx.strokeStyle = inkC; ctx.stroke();
+// marker shapes as outlines (unit radius), so they can be drawn by hand: wobbly ink, colored in slightly off the lines
+const circlePts = (cx, cy, rr, a0 = 0, a1 = Math.PI*2, n = 14) => Array.from({length:n+1}, (_,i) => { const a = a0 + (a1-a0)*i/n; return [cx + rr*Math.cos(a), cy + rr*Math.sin(a)]; });
+function shapeContours(shape){
+  switch(shape){
+    case "dot": return [{pts: circlePts(0,0,.75).slice(0,-1), smooth:true}];
+    case "square": return [{pts: [[-.72,-.72],[.72,-.72],[.72,.72],[-.72,.72]]}];
+    case "diamond": return [{pts: [[0,-1],[.8,0],[0,1],[-.8,0]]}];
+    case "tri": return [{pts: [[0,-.95],[.92,.7],[-.92,.7]]}];
+    case "ring": return [{pts: circlePts(0,0,.85).slice(0,-1), smooth:true}, {pts: circlePts(0,0,.42,0,Math.PI*2,9).slice(0,-1).reverse(), smooth:true}];
+    case "cross": { const a=.3, b=.9; return [{pts: [[-a,-b],[a,-b],[a,-a],[b,-a],[b,a],[a,a],[a,b],[-a,b],[-a,a],[-b,a],[-b,-a],[-a,-a]]}]; }
+    case "moon": return [{pts: [...circlePts(0,0,.85,Math.PI*.3,Math.PI*1.7,12), ...circlePts(.42,0,.62,Math.PI*1.62,Math.PI*.38,8)].reverse(), smooth:true}];
+    case "flag": return [{pts: [[-.6,.95],[-.6,-.95],[.8,-.55],[-.35,-.1],[-.35,.95]]}];
+    default: return [{pts: Array.from({length:10}, (_,i) => { const a = -Math.PI/2 + i*Math.PI/5, rr = i%2 ? .45 : 1; return [rr*Math.cos(a), rr*Math.sin(a)]; })}];
+  }
 }
+function roughShape(C, shape, x, y, r, seed, amt){
+  C.beginPath();
+  for (const {pts, smooth} of shapeContours(shape)){
+    const P = pts.map(([a,b],i) => [x + a*r + wob(seed + i*1.7)*r*amt, y + b*r + wob(seed + i*2.3 + 9)*r*amt]);
+    if (smooth){                                             // curve through the midpoints, like a quick round stroke
+      const m = (i) => { const A = P[i % P.length], B = P[(i+1) % P.length]; return [(A[0]+B[0])/2, (A[1]+B[1])/2]; };
+      C.moveTo(...m(0)); for (let i = 1; i <= P.length; i++){ const Q = P[i % P.length], M = m(i); C.quadraticCurveTo(Q[0], Q[1], M[0], M[1]); }
+    } else {                                                 // straight-ish edges that bow a little
+      C.moveTo(...P[0]);
+      for (let i = 1; i <= P.length; i++){ const A = P[i-1], B = P[i % P.length], k = wob(seed + i*5.1)*r*amt*1.4;
+        const dx = B[0]-A[0], dy = B[1]-A[1], L = Math.hypot(dx,dy) || 1; C.quadraticCurveTo((A[0]+B[0])/2 - dy/L*k, (A[1]+B[1])/2 + dx/L*k, B[0], B[1]); }
+    }
+    C.closePath();
+  }
+}
+// markers are colored in by hand: a marker-pen fill a little off the lines, then a wobbly ink outline drawn twice
+function drawMarker(C, shape, x, y, r, color, inkC, seed){
+  // colored in with a marker: a lighter wash, then a few fat scribbled strokes, all a little off the lines
+  C.save(); roughShape(C, shape, x + r*.16, y + r*.16, r*.97, seed + 31, .1); C.fillStyle = mixHex(color, "#ffffff", .38); C.fill("evenodd"); C.clip("evenodd");
+  C.strokeStyle = color; C.lineWidth = r*.3; C.lineCap = "round"; C.lineJoin = "round"; C.beginPath();
+  for (let i = -3; i <= 3; i++){ const o = i*r*.38, j = wob(seed + i)*r*.12; i % 2 ? C.moveTo(x - r*1.2 + o + j, y + r*1.2) : C.lineTo(x - r*1.2 + o + j, y + r*1.2); C.lineTo(x + r*1.2 + o - j, y - r*1.2); }
+  C.stroke(); C.restore();
+  C.lineJoin = "round"; C.lineCap = "round"; C.strokeStyle = inkC;
+  roughShape(C, shape, x, y, r, seed, .1); C.lineWidth = r*.16; C.stroke();
+  roughShape(C, shape, x - r*.03, y + r*.02, r*1.02, seed + 17, .14); C.lineWidth = r*.06; C.stroke();
+}
+const seedOfId = id => { let h = 0; for (const ch of String(id||"")) h = (h*31 + ch.charCodeAt(0)) % 9973; return h; };
+function marker(shape, x, y, r, color, inkC, seed){ drawMarker(ctx, shape, x, y, r, color, inkC, seed || 0); }
 // where the pieces go: one in the middle, then pairs, a triangle, a square; more than four shows three and a count
 const MARKER_SPOTS = {1:[[0,-.12]], 2:[[-.36,-.12],[.36,-.12]], 3:[[-.34,-.3],[.34,-.3],[0,.12]], 4:[[-.31,-.3],[.31,-.3],[-.31,.12],[.31,.12]]};
 const MARKER_R = {1:.36, 2:.27, 3:.24, 4:.21};
@@ -670,9 +705,9 @@ function paint(){
     }
     const ms = d.m || []; if (!ms.length) continue;
     const over = ms.length > 4, k = over ? 4 : ms.length, spots = MARKER_SPOTS[k], r0 = S*MARKER_R[k];
-    ms.slice(0, over ? 3 : 4).forEach((m,i) => marker(MARKERS[m.k] ? MARKERS[m.k][1] : "dot", cx + spots[i][0]*S, cy + spots[i][1]*S, r0, m.color || "#e6c440", ink));
+    ms.slice(0, over ? 3 : 4).forEach((m,i) => marker(MARKERS[m.k] ? MARKERS[m.k][1] : "dot", cx + spots[i][0]*S, cy + spots[i][1]*S, r0, m.color || "#e6c440", ink, seedOfId(m.id)));
     if (over){ const [sx,sy] = spots[3], x = cx + sx*S, y = cy + sy*S;
-      ctx.beginPath(); ctx.arc(x, y, r0*.95, 0, Math.PI*2); ctx.fillStyle = surface; ctx.fill(); ctx.lineWidth = r0*.16; ctx.strokeStyle = ink; ctx.stroke();
+      roughShape(ctx, "dot", x, y, r0*1.27, 5, .08); ctx.fillStyle = surface; ctx.fill(); ctx.lineWidth = r0*.14; ctx.strokeStyle = ink; ctx.stroke();
       ctx.fillStyle = ink; ctx.font = `700 ${r0*.95}px "Space Mono", monospace`; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(`+${ms.length-3}`, x, y + r0*.04); }
     if (px >= 46){
       const labels = ms.filter(m => m.label), label = labels.length ? labels[0].label + (labels.length > 1 ? ` +${labels.length-1}` : "") : "";
@@ -950,7 +985,7 @@ const swatch = color => el("span",{class:"sw", style:`background:${color}`, "ari
 function markerIcon(k, color, px = 28){
   const cv = document.createElement("canvas"), d = 56; cv.width=d; cv.height=d; cv.setAttribute("aria-hidden","true");
   cv.style.cssText = `width:${px}px;height:${px}px;flex:0 0 ${px}px;display:block`;
-  drawMarkerOn(cv.getContext("2d"), MARKERS[k] ? MARKERS[k][1] : "dot", d/2, d/2, d*.36, color); return cv;
+  drawMarker(cv.getContext("2d"), MARKERS[k] ? MARKERS[k][1] : "dot", d/2, d/2, d*.36, color, css("--line"), 7); return cv;
 }
 function drawMarkerOn(C, shape, x, y, r, color){
   shapePath(C, shape, x, y, r); C.fillStyle = color; C.fill("evenodd"); C.lineWidth = r*.12; C.strokeStyle = "#1a1d26"; C.stroke();
