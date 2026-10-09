@@ -80,6 +80,9 @@ canvas{display:block;width:100%;height:100%;touch-action:none;-webkit-touch-call
 .count{font-weight:700;font-size:.95rem;white-space:nowrap;padding:0 4px;font-variant-numeric:tabular-nums}
 .sheet > .shead{position:sticky;top:-12px;z-index:2;background:var(--surface);margin:-12px -16px 0;padding:12px 16px 8px}
 .shead h2{margin:0;font-size:1.05rem;flex:1;min-width:0;overflow-wrap:anywhere}
+.stitle{flex:1;min-width:0;display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+.stitle h2{flex:0 1 auto}
+.coord{font-family:"Space Mono",monospace;font-weight:700;font-size:.8rem;color:var(--muted);white-space:nowrap}
 .btn{min-height:44px;padding:0 14px;border-radius:10px;border:1px solid var(--line);background:var(--raise);font-weight:700;font-size:.95rem;cursor:pointer}
 .btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
 .btn.quiet{border-color:transparent;background:transparent;color:var(--muted)}
@@ -719,6 +722,17 @@ function paint(){
         ctx.fillStyle = fg; ctx.fillText(t, cx, ty + S*.01); }
     }
   }
+  // coordinates, small at the top of each hex (column, row), as players call them in Discord
+  if (px >= 40){
+    ctx.font = `700 ${S*.17}px "Space Mono", monospace`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    for (let r=0;r<ROWS;r++) for (let c=0;c<COLS;c++){
+      const [cx,cy] = center(c,r); if (!vis(cx,cy)) continue;
+      const d = view(hid(c,r)); if (px >= 46 && d && (d.m||[]).some(m => m.label)) continue;   // the marker label sits there
+      const L = d && landInfo(d.t), t = `${c+1},${r+1}`, y = cy - S*.64;
+      ctx.lineWidth = S*.07; ctx.strokeStyle = L ? washOf(L.color) : unmade; ctx.strokeText(t, cx, y);
+      ctx.globalAlpha = .7; ctx.fillStyle = ink; ctx.fillText(t, cx, y); ctx.globalAlpha = 1;
+    }
+  }
   // highlight: dim every hex the chosen player never touched, outline the ones they did
   if (highlight){
     const dim = css("--void");
@@ -846,9 +860,8 @@ canvas.addEventListener("wheel", e => {
 
 function tap(sx, sy){
   const h = pick(...toWorld(sx,sy)); if (!h) return;
-  if (hexPx() < 30){ // too small to hit reliably: zoom in on that spot first
-    zoomAt(46/hexPx(), sx, sy); toast("Zoomed in. Tap a hex to select it."); return;
-  }
+  // zoomed out: select it and zoom in on it, so a slightly-off tap is easy to see and fix
+  if (hexPx() < 30) zoomAt(46/hexPx(), sx, sy);
   if (moveState){ moveMarkerTo(hid(...h)); return; }
   selectHex(hid(...h), false);
 }
@@ -937,7 +950,7 @@ function afterSelect(id){
 function updateHint(){
   const h = $("hint"), show = !hinted && canWrite && histIdx === null && selection.size === 0 && modal.hidden;
   h.hidden = !show; if (!show) return;
-  const t = hexPx() < 30 ? "Tap the map to zoom in" : "Tap a hex to change it";
+  const t = "Tap a hex to change it";
   if (h.textContent !== t) h.textContent = t;
 }
 
@@ -1054,7 +1067,9 @@ function fillSheet(){
   const reset = n > 1 && !sheetForm ? el("button",{type:"button", class:"step deselect", "aria-label":`Deselect all ${n} hexes`, onclick:deselectAll}, "✕") : null;
   sheet.append(el("div",{class:"shead"},
     sheetCat ? el("button",{type:"button", class:"btn quiet", onclick:()=>{ sheetCat=null; sheetForm=null; renderSheet(); }}, "‹ Back") : null,
-    el("h2",{}, sheetCat || "Selected"), stepper, reset));
+    el("div",{class:"stitle"}, el("h2",{}, sheetCat || "Selected"),
+      n === 1 ? el("span",{class:"coord", "aria-label":`Hex ${parse(ids[0])[0]+1}, ${parse(ids[0])[1]+1}`}, `${parse(ids[0])[0]+1},${parse(ids[0])[1]+1}`) : null),
+    stepper, reset));
   if (!sheetCat){ sheet.append(rowsFor(ids)); if (!canWrite) sheet.append(el("p",{class:"note"}, "You can view this map but not change it.")); return; }
   if (sheetCat === "Land") landOptions(ids);
   else if (sheetCat === "Natures") natureOptions(ids);
@@ -1500,6 +1515,7 @@ window.__soc = {
   fold, merge, landInfo, center, edgeNeighbors, pick,
   state: () => ({ selection:[...selection], draft:Object.fromEntries(draft), base:Object.fromEntries(base), posts, age, cols:COLS, rows:ROWS, adding, sheetCat }),
   view: id => view(id),
+  zoomIn: () => { if (hexPx() < 46) zoomAt(46/hexPx(), W/2, H/2); },
   highlight: () => highlight ? [...highlight.set] : null
 };
 window.__hexScreen = (c,r) => { const [x,y] = center(c,r); const b = canvas.getBoundingClientRect(); return [b.left + x*V.k+V.ox, b.top + y*V.k+V.oy]; }; // used by automated checks

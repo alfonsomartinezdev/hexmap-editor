@@ -3,12 +3,23 @@ const { test, expect } = require("./support/fixtures");
 
 test.beforeEach(async ({ app }) => { await app.open(); });
 
-test("the first tap on the fitted map zooms in instead of selecting", async ({ app }) => {
-  await expect(app.page.locator("#hint")).toHaveText("Tap the map to zoom in");
-  await app.zoomIn();
-  expect((await app.state()).selection).toEqual([]);
-  await expect(app.sheet()).toBeHidden();
+test("a tap on the fitted map selects that hex and zooms in on it", async ({ app }) => {
   await expect(app.page.locator("#hint")).toHaveText("Tap a hex to change it");
+  const [x, y] = await app.at(16, 26);
+  await app.page.touchscreen.tap(x, y); await app.settle();
+  expect((await app.state()).selection).toEqual(["h16_26"]);
+  await expect(app.sheet()).toBeVisible();
+  // and zoomed in on it, big enough to see and fix a slightly-off tap
+  const [ax] = await app.at(16, 26), [bx] = await app.at(17, 26);
+  expect(bx - ax).toBeGreaterThan(40);
+});
+
+test("the selected hex's coordinates show next to the title", async ({ app }) => {
+  await app.zoomIn();
+  await app.tapHex(16, 26);
+  await expect(app.sheet().locator(".shead .coord")).toHaveText("17,27");
+  await app.page.getByRole("button", { name: /^Grow the selection/ }).click();
+  await expect(app.sheet().locator(".shead .coord")).toHaveCount(0);
 });
 
 test("the hint disappears after the first selection and never returns", async ({ app }) => {

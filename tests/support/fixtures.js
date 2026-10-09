@@ -31,9 +31,8 @@ const test = base.extend({
       state: () => page.evaluate(() => window.__soc.state()),
       view: id => page.evaluate(i => window.__soc.view(i), id),
       async zoomIn() {
-        const b = await page.locator("#map").boundingBox();
-        await page.touchscreen.tap(b.x + b.width / 2, b.y + b.height / 2);
-        await page.waitForTimeout(80);
+        await page.evaluate(() => window.__soc.zoomIn());
+        await app.settle();
       },
       // the map shifts when the bottom sheet opens or closes; let that settle before aiming
       settle: () => page.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))),
