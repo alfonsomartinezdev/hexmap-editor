@@ -145,10 +145,13 @@ test("a new land takes a pen, a color and a name, keyboard last", async ({ app }
   await expect(app.button("Ice spires")).toBeVisible();
 });
 
-test("a new people settles the selected hexes", async ({ app }) => {
+test("a new people settles the selected hexes; the border color comes before the name", async ({ app }) => {
   await app.setLand(16, 26, "Plains");
   await app.row("Settled by").click();
   await app.button("New people…").click();
+  const labels = await app.page.locator("#sheet form .sub, #sheet form label").allTextContents();
+  expect(labels).toEqual(["Border color", "Name"]);
+  expect(await app.page.evaluate(() => document.activeElement && document.activeElement.id)).not.toBe("otherName");
   await app.page.fill("#otherName", "Goblins");
   await app.footer("Add").click();
   await expect(app.row("Settled by")).toContainText("Goblins");

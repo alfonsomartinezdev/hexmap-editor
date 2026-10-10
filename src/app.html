@@ -1246,18 +1246,42 @@ function natureOptions(ids){
   o.append(el("button",{type:"button", class:"opt other", onclick:()=>{ natureForm.state = null; sheetForm="other"; renderSheet(); }}, "New nature…"));
   sheet.append(o);
 }
+// a people's border color comes first, then the name (so the keyboard doesn't pop up straight away)
+function peopleForm(onAdd){
+  const used = new Set([...peoples.values()].map(p => p.color));
+  const st = peopleForm.state || (peopleForm.state = {color: (PALETTE.find(([,h]) => !used.has(h)) || PALETTE[0])[1], name:""});
+  const f = el("form",{class:"form", onsubmit:(e)=>{ e.preventDefault(); const v = st.name.trim(); if (!v){ input.focus(); toast("Give the people a name."); return; } peopleForm.state = null; onAdd(v, st.color); }});
+  const input = el("input",{id:"otherName", placeholder:"Name, such as Goblins", autocomplete:"off"}); input.value = st.name;
+  input.oninput = () => { st.name = input.value; };
+  f.append(el("span",{class:"sub"},"Border color"), colorPicker(st.color, c => st.color = c), el("label",{for:"otherName"},"Name"), input);
+  f.dataset.label = "Add";
+  return f;
+}
+function recolorForm(pid){
+  const p = peoples.get(pid); let color = p.color;
+  const f = el("form",{class:"form", onsubmit:(e)=>{ e.preventDefault(); recolorPeople(pid, color); sheetForm = null; renderSheet(); draw(); toast(`${p.name}'s border changed.`); }});
+  f.append(el("div",{class:"row"}, swatch(p.color), el("strong",{}, p.name)), el("span",{class:"sub"},"Border color"), colorPicker(color, c => color = c));
+  f.dataset.label = "Save color";
+  return f;
+}
 function peopleOptions(ids){
   if (sheetForm === "other"){
-    sheet.append(otherForm("Name of the people", true, async (nm, color) => {
+    sheet.append(peopleForm(async (nm, color) => {
       const pid = await addPeople(nm, color);
       applyAll(ids, id => setField(id,"p",pid), `Settled by ${nm}.`);
     })); return;
   }
+  if (sheetForm && sheetForm.startsWith("color:") && peoples.has(sheetForm.slice(6))){ sheet.append(recolorForm(sheetForm.slice(6))); return; }
   const o = el("div",{class:"opts"});
   for (const [pid,p] of peoples) o.append(el("button",{type:"button", class:"opt", onclick:()=>applyAll(ids, id=>setField(id,"p",pid), `Settled by ${p.name}.`)}, swatch(p.color), p.name));
-  o.append(el("button",{type:"button", class:"opt other", onclick:()=>{ sheetForm="other"; renderSheet(); }}, "New people…"));
+  o.append(el("button",{type:"button", class:"opt other", onclick:()=>{ peopleForm.state = null; sheetForm="other"; renderSheet(); }}, "New people…"));
   o.append(el("button",{type:"button", class:"opt other", onclick:()=>applyAll(ids, id=>setField(id,"p",null), "No longer settled.")}, "Not settled"));
   sheet.append(o);
+  if (peoples.size){
+    const chips = el("div",{class:"chips"});
+    for (const [pid,p] of peoples) chips.append(el("button",{type:"button", class:"chip", style:"padding-right:12px", "aria-label":`Change ${p.name}'s border color`, onclick:()=>{ sheetForm = "color:" + pid; renderSheet(); }}, swatch(p.color), p.name));
+    sheet.append(el("p",{class:"sub"},"Change a border color"), chips);
+  }
 }
 function markerOptions(ids){
   // fast path: kind, then a colour; no typing
@@ -1324,16 +1348,16 @@ function moveMarkerTo(to){
 /* ================= draft bar + saving ================= */
 let confirmDiscard = false;
 function renderDraftBar(){
-  const bar = $("draftBar"), n = draft.size;
-  bar.hidden = !n || histIdx !== null || selection.size > 0 || regrouping; bar.textContent = "";
-  if (!n) { confirmDiscard = false; return; }
+  const bar = $("draftBar"), n = draft.size, rc = pendingRecolors();
+  bar.hidden = !(n || rc) || histIdx !== null || selection.size > 0 || regrouping; bar.textContent = "";
+  if (!n && !rc) { confirmDiscard = false; return; }
   if (confirmDiscard){
-    bar.append(el("span",{class:"what"}, `Start over? This clears your ${n} ${n===1?"change":"changes"}.`),
-      el("button",{type:"button", class:"btn danger", onclick:()=>{ draft.clear(); draftDefs = {types:{}, peoples:{}}; undoStack.length = 0; confirmDiscard=false; saveDraftLocal(); renderDraftBar(); renderSheet(); draw(); toast("Cleared. Your post is empty again."); }}, "Start over"),
+    bar.append(el("span",{class:"what"}, `Start over? This clears your ${n + rc} ${n + rc===1?"change":"changes"}.`),
+      el("button",{type:"button", class:"btn danger", onclick:()=>{ draft.clear(); draftDefs = {types:{}, peoples:{}}; rebuildDefs(); undoStack.length = 0; confirmDiscard=false; saveDraftLocal(); renderDraftBar(); renderSheet(); draw(); toast("Cleared. Your post is empty again."); }}, "Start over"),
       el("button",{type:"button", class:"btn", onclick:()=>{ confirmDiscard=false; renderDraftBar(); }}, "Keep"));
     return;
   }
-  bar.append(el("span",{class:"what"}, el("span",{class:"dot","aria-hidden":"true"}), `${n} ${n===1?"hex":"hexes"} changed · not published yet`),
+  bar.append(el("span",{class:"what"}, el("span",{class:"dot","aria-hidden":"true"}), [n ? `${n} ${n===1?"hex":"hexes"} changed` : "", rc ? `${rc} ${rc===1?"border color":"border colors"} changed` : ""].filter(Boolean).join(", ") + " · not published yet"),
     el("button",{type:"button", class:"btn", disabled: !undoStack.length || null, onclick:undo}, "Undo"),
     el("button",{type:"button", class:"btn", onclick:()=>{ confirmDiscard=true; renderDraftBar(); }}, "Start over"),
     el("span",{class:"grow"}),
@@ -1357,7 +1381,7 @@ function askName(then){
   openModal("Who's posting?", body);
 }
 async function savePost(){
-  if (!draft.size) return;
+  if (!draft.size && !pendingRecolors()) return;
   if (backend && backend.needsName && !myName()) return withName(savePost);
   const post = newPost({ changes: wire(Object.fromEntries(draft)) });
   if (Object.keys(draftDefs.types).length) post.types = draftDefs.types;
@@ -1396,6 +1420,15 @@ async function addCustom(kind, name, color, look){
   draftDefs.types[rid()] = look ? {kind, name, glyph:look} : {kind, name}; saveDraftLocal();
   return name;
 }
+// a new color for an existing people travels with the next post, like a new people does
+function recolorPeople(pid, color){
+  const p = peoples.get(pid); if (!p || p.color === color) return;
+  peoples.set(pid, {name:p.name, color}); draftDefs.peoples[pid] = {name:p.name, color}; saveDraftLocal(); renderDraftBar();
+}
+const publishedPeople = pid => posts.some(p => p.peoples && p.peoples[pid]);
+const pendingRecolors = () => Object.keys(draftDefs.peoples).filter(publishedPeople).length;
+// lands, natures and peoples as published, plus this device's unpublished ones
+function rebuildDefs(){ customLand.clear(); customNat.clear(); peoples.clear(); applyDefs(posts); applyDefs([draftDefs]); }
 async function addPeople(name, color){
   for (const [pid,p] of peoples) if (p.name.toLowerCase() === name.toLowerCase()) return pid;
   const pid = rid(); peoples.set(pid, {name, color});
