@@ -175,3 +175,18 @@ test("rulers can be hidden from the menu, and that is remembered", async ({ app 
   await expect(app.page.getByRole("switch", { name: "Rulers" })).toHaveAttribute("aria-checked", "false");
 });
 
+
+test("the menu closes when swiped down", async ({ app }) => {
+  await app.open();
+  await app.page.locator("#menuBtn").click();
+  await expect(app.page.locator("#modal")).toBeVisible();
+  const box = await app.page.locator(".mpanel .mhead").boundingBox();
+  const x = box.x + box.width / 2, y = box.y + box.height / 2;
+  await app.page.evaluate(([x, y]) => {
+    const el = document.elementFromPoint(x, y), t = (yy) => new Touch({ identifier: 1, target: el, clientX: x, clientY: yy });
+    el.dispatchEvent(new TouchEvent("touchstart", { touches: [t(y)], bubbles: true, cancelable: true }));
+    for (let i = 1; i <= 8; i++) el.dispatchEvent(new TouchEvent("touchmove", { touches: [t(y + i * 25)], bubbles: true, cancelable: true }));
+    el.dispatchEvent(new TouchEvent("touchend", { touches: [], bubbles: true, cancelable: true }));
+  }, [x, y]);
+  await expect(app.page.locator("#modal")).toBeHidden();
+});
