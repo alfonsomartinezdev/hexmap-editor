@@ -1647,16 +1647,16 @@ $("menuBtn").onclick = () => {
   const item = (title, sub, fn) => el("button",{type:"button", class:"link", style:"min-height:60px", onclick:()=>{ closeModal(); fn(); }},
     el("span",{}, el("strong",{}, title), el("br"), el("span",{class:"note"}, sub)), el("span",{class:"when","aria-hidden":"true"}, "›"));
   openModal("Menu", [
+    rulersToggle(),
+    themeToggle(),
     item("History", posts.length ? `${posts.length} published ${posts.length===1?"post":"posts"}` : "No posts yet", openHistory),
     window.RULES_MD ? item("Rules", "How to play Songs of Creation", openRules) : null,
     item("Key", "What the colors and symbols mean", openKey),
     item("Age", `${AGES[age][0]} · one area is ${AGES[age][1]} ${AGES[age][1]===1?"hex":"hexes"}`, openWorld),
     item("Peoples", peoples.size ? "Change border colors" : "None yet", () => openPeoples()),
-    canWrite && backend && backend.newMap ? item("Clear map", "Start again with an empty map", () => openClear(1)) : null,
     backend && backend.needsName ? item("Your name", myName() || "Not set yet", () => askName(null)) : null,
-    el("p",{class:"sub"}, "On this device"),
-    rulersToggle(),
-    themeToggle()
+    canWrite && backend && backend.newMap ? item("Clear map", "Start again with an empty map", () => openClear(1)) : null
+
   ]);
 };
 
