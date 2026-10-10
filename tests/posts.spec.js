@@ -122,3 +122,17 @@ test("if land arrives after the Land list opened by itself, the sheet goes back 
   await expect(app.row("Land")).toContainText("Forest");
 });
 
+
+test("Clear map in the claude.ai copy starts a new map collection", async ({ app }) => {
+  await app.open({ mock: { userId: "u_me", names: { u_me: "Ash" } } });
+  await app.page.evaluate(() => window.__mockStore.put("posts/p0001", { by: "u_other", name: "Rowan", at: 1, changes: { h16_26: { t: "forest" } } }));
+  await expect.poll(async () => (await app.view("h16_26") || {}).t).toBe("forest");
+  await app.page.locator("#menuBtn").click();
+  await app.page.locator("#mBody button.link", { hasText: /^Clear map/ }).click();
+  await app.page.getByRole("button", { name: "Continue" }).click();
+  await app.page.getByRole("button", { name: "Clear the map" }).click();
+  await expect.poll(() => app.view("h16_26")).toBeNull();
+  const map = await app.page.evaluate(() => window.__mockStore.all()["world/current"].map);
+  expect(map).toMatch(/^m/);
+  await expect.poll(async () => (await app.state()).posts.length).toBe(1);
+});

@@ -2,11 +2,32 @@
   "rules": {
     "posts": {
       ".read": true,
-      ".indexOn": ["at"],
+      ".indexOn": [
+        "at"
+      ],
       "$post": {
         ".write": "!data.exists()",
         ".validate": "newData.hasChildren(['by', 'at']) && newData.child('at').val() === now"
       }
+    },
+    "maps": {
+      "$map": {
+        "posts": {
+          ".read": true,
+          ".indexOn": [
+            "at"
+          ],
+          "$post": {
+            ".write": "!data.exists()",
+            ".validate": "newData.hasChildren(['by', 'at']) && newData.child('at').val() === now"
+          }
+        }
+      }
+    },
+    "current": {
+      ".read": true,
+      ".write": true,
+      ".validate": "newData.hasChildren(['map', 'at']) && newData.child('at').val() === now"
     }
   }
 }

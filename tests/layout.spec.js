@@ -55,7 +55,7 @@ test("the menu holds History, Rules, Key, Age and Peoples, with no map-size cont
   await app.open();
   await app.page.locator("#menuBtn").click();
   const items = await app.page.locator("#mBody button.link strong").allTextContents();
-  expect(items).toEqual(["History", "Rules", "Key", "Age", "Peoples"]);
+  expect(items).toEqual(["History", "Rules", "Key", "Age", "Peoples", "Clear map"]);
   await app.page.locator("#mBody button.link", { hasText: /^Age/ }).click();
   await expect(app.page.locator("#cols, #rows")).toHaveCount(0);
   await app.page.getByRole("button", { name: "Close" }).click();

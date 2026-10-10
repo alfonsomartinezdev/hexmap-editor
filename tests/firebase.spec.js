@@ -135,3 +135,61 @@ test("a people's border color can be changed, and the change is published", asyn
   const [w] = await writes(app);
   expect(w.body.peoples).toEqual({ gob: { name: "Goblins", color: "#4b56c8" } });
 });
+
+const openClear = async app => { await app.page.locator("#menuBtn").click(); await app.page.locator("#mBody button.link", { hasText: /^Clear map/ }).click(); };
+
+test("Clear map needs two confirmations, then starts an empty map with no history", async ({ app }) => {
+  await app.page.evaluate(() => { localStorage.setItem("soc-name", "Ash"); window.__fakeFirebase.add("p0001", { by: "d_other", name: "Rowan",
+    types: { ab: { kind: "land", name: "Dunes", color: "#dcc58a", pen: "dots" } }, peoples: { gob: { name: "Goblins", color: "#c8323c" } },
+    changes: { h16_26: { t: "x-ab", p: "gob" } } }); });
+  await expect.poll(async () => (await app.view("h16_26") || {}).t).toBe("x-ab");
+  // backing out at either step does nothing
+  await openClear(app);
+  await app.page.getByRole("button", { name: "Cancel" }).click();
+  await openClear(app);
+  await app.page.getByRole("button", { name: "Continue" }).click();
+  await expect(app.page.locator("#mTitle")).toHaveText("Are you sure?");
+  await app.page.getByRole("button", { name: "Keep the map" }).click();
+  expect(await app.page.evaluate(() => window.__fakeFirebase.current)).toEqual([]);
+  // both steps clear it
+  await openClear(app);
+  await app.page.getByRole("button", { name: "Continue" }).click();
+  await app.page.getByRole("button", { name: "Clear the map" }).click();
+  await expect.poll(() => app.page.evaluate(() => window.__fakeFirebase.current.length)).toBe(1);
+  await expect.poll(() => app.view("h16_26")).toBeNull();
+  // history starts again: just the new map's first post, which carries the lands and peoples over
+  await expect.poll(async () => (await app.state()).posts.length).toBe(1);
+  const [seed] = (await app.state()).posts;
+  expect(seed.world).toMatchObject({ newMap: true, age: 1 });
+  expect(await app.page.evaluate(() => window.__soc.landInfo("x-ab").name)).toBe("Dunes");
+  // new posts go to the new map
+  await app.tapHex(18, 26); await app.button("Water").click(); await app.done();
+  await publish(app);
+  await expect.poll(async () => (await writes(app)).length).toBe(2);
+  expect((await writes(app))[1].path).toMatch(/^\/maps\/m[^/]+\/posts\//);
+  expect((await app.state()).posts).toHaveLength(2);
+});
+
+test("when someone else clears the map, it empties here too and unpublished changes are dropped", async ({ app }) => {
+  await app.page.evaluate(() => window.__fakeFirebase.add("p0001", { by: "d_other", name: "Rowan", changes: { h16_26: { t: "forest" } } }));
+  await app.setLand(18, 26, "Desert"); await app.done();
+  await expect(app.page.locator("#draftBar")).toBeVisible();
+  await app.page.evaluate(() => window.__fakeFirebase.switchTo("m2", { id: "s1", by: "d_other", name: "Rowan", world: { age: 1, newMap: true } }));
+  await expect.poll(() => app.view("h16_26")).toBeNull();
+  expect(await app.view("h18_26")).toBeNull();
+  await expect(app.page.locator("#draftBar")).toBeHidden();
+  await expect(app.page.locator("#toast")).toContainText("cleared");
+});
+
+test("a database still on the old rules keeps working; clearing explains what's missing", async ({ app }) => {
+  await app.page.addInitScript(() => { window.__fakeFirebaseOld = true; });
+  await app.page.evaluate(() => localStorage.setItem("soc-name", "Ash"));
+  await app.page.reload(); await app.page.waitForFunction(() => window.__soc);
+  await app.page.evaluate(() => window.__fakeFirebase.add("p0001", { by: "d_other", name: "Rowan", changes: { h16_26: { t: "forest" } } }));
+  await expect.poll(async () => (await app.view("h16_26") || {}).t).toBe("forest");
+  await openClear(app);
+  await app.page.getByRole("button", { name: "Continue" }).click();
+  await app.page.getByRole("button", { name: "Clear the map" }).click();
+  await expect(app.page.locator("#toast")).toContainText("updated database rules");
+  expect((await app.view("h16_26")).t).toBe("forest");
+});
