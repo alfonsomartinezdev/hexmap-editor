@@ -460,6 +460,8 @@ const inkFor = color => lum(color) < 0.55 ? "rgba(255,255,255,.85)" : "rgba(20,2
 function hexToRgb(h){ const n = parseInt(h.slice(1),16); return [n>>16, (n>>8)&255, n&255]; }
 function mixHex(a, b, t){ const A = hexToRgb(a), B = hexToRgb(b); return "#" + A.map((v,i) => Math.round(v*(1-t) + B[i]*t).toString(16).padStart(2,"0")).join(""); }
 const patCache = new Map();
+// zoomed far out the hatching is too fine to draw, so use one color with the same overall tone
+function flatOf(color){ return mixHex(washOf(color), isDark() ? mixHex(color, "#f3f0e6", .22) : mixHex(color, "#141414", .22), .3); }
 function washOf(color){ return isDark() ? mixHex(color, "#1d2220", .35) : mixHex(color, "#f1f0ea", .45); }
 // one 120px seamless tile per color and pen
 const tileCache = new Map();
@@ -658,7 +660,7 @@ function paint(){
   for (let r=0;r<ROWS;r++) for (let c=0;c<COLS;c++){
     const [cx,cy] = center(c,r); if (!vis(cx,cy)) continue;
     const id = hid(c,r), d = view(id), L = d && landInfo(d.t);
-    if (L){ roughHex(cx,cy,S*1.03,seedOf(c,r),.04); ctx.fillStyle = px >= 14 ? landFill(L) : washOf(L.color); ctx.fill();
+    if (L){ roughHex(cx,cy,S*1.03,seedOf(c,r),.04); ctx.fillStyle = px >= 14 ? landFill(L) : flatOf(L.color); ctx.fill();
       if (px > 9){ ctx.strokeStyle = isDark() ? "rgba(243,240,230,.1)" : "rgba(20,20,20,.09)"; ctx.lineWidth = Math.max(lw, S*.025); ctx.lineJoin = "round"; ctx.stroke(); } }
     else { hexPath(cx,cy,S+.03); ctx.fillStyle = unmade; ctx.fill();
       if (px > 9){ roughHex(cx,cy,S*.97,seedOf(c,r),.05); ctx.strokeStyle = grid; ctx.lineWidth = lw; ctx.globalAlpha = gridA; ctx.stroke(); ctx.globalAlpha = 1; } }
@@ -674,6 +676,7 @@ function paint(){
       for (let i=0;i<6;i++){
         const [nc,nr] = nb[i]; const nd = inB(nc,nr) ? view(hid(nc,nr)) : null;
         if (nd && nd.t === d.t) continue;
+        if (histIdx === null && (draft.has(hid(c,r)) || draft.has(hid(nc,nr)))) continue;   // not inked yet: drawn in pencil below
         const a1 = Math.PI/180*(60*i-30), a2 = Math.PI/180*(60*(i+1)-30), s0 = S*1.0, sd = seedOf(c,r) + i*13;
         const x1 = cx+s0*Math.cos(a1), y1 = cy+s0*Math.sin(a1), x2 = cx+s0*Math.cos(a2), y2 = cy+s0*Math.sin(a2);
         const mx = (x1+x2)/2 + wob(sd)*S*.12, my = (y1+y2)/2 + wob(sd+3)*S*.12;
@@ -695,7 +698,7 @@ function paint(){
     const all = new Set(ids); for (const [id,d] of base) if (d.p === pid) all.add(id); for (const [id] of draft){ const d = view(id); if (d && d.p === pid) all.add(id); else all.delete(id); }
     const col = peoples.get(pid).color; ctx.strokeStyle = col; ctx.lineCap = "round"; ctx.lineJoin = "round";
     ctx.beginPath(); for (const id of ids){ const [c,r] = parse(id), [cx,cy] = center(c,r); edgeNeighbors(c,r).forEach(([nc,nr], i) => { if (!all.has(hid(nc,nr))) roughEdge(cx, cy, S*.95, i, .05); }); }
-    ctx.lineWidth = Math.max(1.6*lw, S*.09); ctx.globalAlpha = .7; ctx.stroke(); ctx.globalAlpha = 1;
+    ctx.lineWidth = Math.max(1.6*lw, S*.1); ctx.stroke();
   }
   // rivers sit on top of the land: link to neighbouring river hexes and to sea or lake
   for (const [c,r,cx,cy,d] of cells){
@@ -766,7 +769,17 @@ function paint(){
   ctx.lineCap = "round"; ctx.lineJoin = "round";
   if (histIdx === null){
     // unpublished changes: a faint pencil outline, sketched but not inked yet
-    if (draft.size){ groupEdges(new Set(draft.keys()), S*.86, .04); ctx.setLineDash([S*.1, S*.12]); ctx.strokeStyle = ink; ctx.globalAlpha = .45; ctx.lineWidth = Math.max(lw, S*.04); ctx.stroke(); ctx.setLineDash([]); ctx.globalAlpha = 1; }
+    // the edges of unpublished hexes, and any coastline they touch, are pencilled in place of the ink
+    if (draft.size){
+      ctx.beginPath();
+      for (const id of draft.keys()){
+        const [c,r] = parse(id); if (!inB(c,r)) continue; const [cx,cy] = center(c,r); if (!vis(cx,cy)) continue; const d = view(id) || {};
+        edgeNeighbors(c,r).forEach(([nc,nr], i) => { const nid = hid(nc,nr), nd = inB(nc,nr) ? view(nid) : null;
+          const coast = (d.t || (nd && nd.t)) && (!nd || nd.t !== d.t);
+          if (!draft.has(nid) || coast) roughEdge(cx, cy, S, i, .04); });
+      }
+      ctx.setLineDash([S*.12, S*.1]); ctx.strokeStyle = ink; ctx.globalAlpha = .6; ctx.lineWidth = Math.max(1.2*lw, S*.05); ctx.stroke(); ctx.setLineDash([]); ctx.globalAlpha = 1;
+    }
   } else {
     // a post in history: everything it didn't change fades back
     const changed = new Set(Object.keys(posts[histIdx].changes||{})), dim = css("--void");
