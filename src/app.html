@@ -680,6 +680,8 @@ function paint(){
   try { paintMap(); }
   catch(e){ console.error("paint failed", e); try { ctx.restore(); } catch(_){} }
 }
+// unpublished hexes and the ones being edited are drawn in pencil, not ink
+const pencilled = id => draft.has(id) || selection.has(id);
 function paintMap(){
   ctx.setTransform(DPR,0,0,DPR,0,0); ctx.fillStyle = css("--void"); ctx.fillRect(0,0,W,H);
   ctx.setTransform(DPR*V.k,0,0,DPR*V.k,DPR*V.ox,DPR*V.oy);
@@ -711,7 +713,7 @@ function paintMap(){
       for (let i=0;i<6;i++){
         const [nc,nr] = nb[i]; const nd = inB(nc,nr) ? view(hid(nc,nr)) : null;
         if (nd && nd.t === d.t) continue;
-        if (histIdx === null && (draft.has(hid(c,r)) || draft.has(hid(nc,nr)))) continue;   // not inked yet: drawn in pencil below
+        if (histIdx === null && (pencilled(hid(c,r)) || pencilled(hid(nc,nr)))) continue;   // not inked yet, or being changed: drawn in pencil below
         const a1 = Math.PI/180*(60*i-30), a2 = Math.PI/180*(60*(i+1)-30), s0 = S*1.0, sd = seedOf(c,r) + i*13;
         const x1 = cx+s0*Math.cos(a1), y1 = cy+s0*Math.sin(a1), x2 = cx+s0*Math.cos(a2), y2 = cy+s0*Math.sin(a2);
         const mx = (x1+x2)/2 + wob(sd)*S*.12, my = (y1+y2)/2 + wob(sd+3)*S*.12;
@@ -793,13 +795,14 @@ function paintMap(){
   if (histIdx === null){
     // unpublished changes: a faint pencil outline, sketched but not inked yet
     // the edges of unpublished hexes, and any coastline they touch, are pencilled in place of the ink
-    if (draft.size){
+    if (draft.size || selection.size){
+      const P = new Set([...draft.keys(), ...selection]);
       ctx.beginPath();
-      for (const id of draft.keys()){
+      for (const id of P){
         const [c,r] = parse(id); if (!inB(c,r)) continue; const [cx,cy] = center(c,r); if (!vis(cx,cy)) continue; const d = view(id) || {};
         edgeNeighbors(c,r).forEach(([nc,nr], i) => { const nid = hid(nc,nr), nd = inB(nc,nr) ? view(nid) : null;
           const coast = (d.t || (nd && nd.t)) && (!nd || nd.t !== d.t);
-          if (!draft.has(nid) || coast) roughEdge(cx, cy, S, i, .04); });
+          if (!P.has(nid) || coast) roughEdge(cx, cy, S, i, .04); });
       }
       ctx.setLineDash([S*.12, S*.1]); ctx.strokeStyle = ink; ctx.globalAlpha = .6; ctx.lineWidth = Math.max(1.2*lw, S*.05); ctx.stroke(); ctx.setLineDash([]); ctx.globalAlpha = 1;
     }
