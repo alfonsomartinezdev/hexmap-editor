@@ -162,7 +162,7 @@ test("dark mode off stays off even when the surrounding page says dark", async (
   expect(bg).toBe("rgb(236, 235, 229)");
 });
 
-test("rulers can be hidden from the menu, and that is remembered", async ({ app }) => {
+test.skip("rulers can be hidden from the menu, and that is remembered", async ({ app }) => {
   await app.open();
   await app.page.locator("#menuBtn").click();
   const sw = app.page.getByRole("switch", { name: "Rulers" });
@@ -190,3 +190,11 @@ test("the menu closes when swiped down", async ({ app }) => {
   }, [x, y]);
   await expect(app.page.locator("#modal")).toBeHidden();
 });
+
+test("rulers are off for now, with no switch in the menu", async ({ app }) => {
+  await app.open();
+  await app.page.locator("#menuBtn").click();
+  await expect(app.page.getByRole("switch", { name: "Rulers" })).toHaveCount(0);
+  await expect(app.page.getByRole("switch", { name: /Dark mode/ })).toHaveCount(1);
+});
+

@@ -1667,7 +1667,9 @@ function switchRow(label, get, set){
 }
 const themeToggle = () => switchRow("Dark mode", isDark, on => setTheme(on ? "dark" : "light"));
 // rulers are on unless this device turned them off
-const rulersOn = () => lsGet("soc-rulers") !== "off";
+// rulers are switched off for now; set RULERS_AVAILABLE to bring back the menu switch
+const RULERS_AVAILABLE = false;
+const rulersOn = () => RULERS_AVAILABLE && lsGet("soc-rulers") !== "off";
 const rulersToggle = () => switchRow("Rulers", rulersOn, on => { lsSet("soc-rulers", on ? "on" : "off"); draw(); });
 // peoples' border colors, changed from the menu; the change is a draft like any other
 function openPeoples(pid){
@@ -1694,7 +1696,7 @@ $("menuBtn").onclick = () => {
   const item = (title, sub, fn) => el("button",{type:"button", class:"link", style:"min-height:60px", onclick:()=>{ closeModal(); fn(); }},
     el("span",{}, el("strong",{}, title), el("br"), el("span",{class:"note"}, sub)), el("span",{class:"when","aria-hidden":"true"}, "›"));
   openModal("Menu", [
-    rulersToggle(),
+    RULERS_AVAILABLE ? rulersToggle() : null,
     themeToggle(),
     item("History", posts.length ? `${posts.length} published ${posts.length===1?"post":"posts"}` : "No posts yet", openHistory),
     window.RULES_MD ? item("Rules", "How to play Songs of Creation", openRules) : null,
