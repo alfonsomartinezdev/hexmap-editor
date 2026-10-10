@@ -646,6 +646,35 @@ function groupEdges(ids, s, amt){
     edgeNeighbors(c,r).forEach(([nc,nr], i) => { if (!ids.has(hid(nc,nr))) roughEdge(cx, cy, s, i, amt); });
   }
 }
+// rulers: column numbers along the top and row numbers down the left, fixed to the screen,
+// sliding with the map so they always line up with the hexes under them
+function drawRulers(px){
+  if (px < 12 || !rulersOn()) return;
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+  const sb = stage.getBoundingClientRect(), tops = [$("menuBtn"), document.querySelector(".showbox")].map(e => e.getBoundingClientRect().bottom - sb.top);
+  const top = Math.max(...tops) + 6, th = 18, lw = 26, rowH = px * .866;
+  const surface = css("--surface"), line = css("--line"), fg = css("--fg"), mark = css("--accent");
+  const [sc, sr] = selection.size === 1 ? parse([...selection][0]) : [-1, -1];
+  const cstep = px >= 24 ? 1 : px >= 12 ? 5 : 10, rstep = rowH >= 16 ? 1 : rowH >= 8 ? 5 : 10;
+  ctx.font = `700 10px "Space Mono", monospace`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  // strips
+  ctx.globalAlpha = .92; ctx.fillStyle = surface; ctx.fillRect(0, top, W, th); ctx.fillRect(0, top + th, lw, H - top - th); ctx.globalAlpha = 1;
+  ctx.strokeStyle = line; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(0, top + th); ctx.lineTo(W, top + th); ctx.moveTo(lw, top + th); ctx.lineTo(lw, H); ctx.stroke();
+  // columns, lined up with the even rows (odd rows sit half a hex to the right)
+  for (let c = 0; c < COLS; c++){
+    const x = (SQ3*S*(c + .5))*V.k + V.ox; if (x < lw + 6 || x > W - 6) continue;
+    const on = c === sc; if (!on && (c+1) % cstep && cstep > 1) continue;
+    if (on){ ctx.fillStyle = mark; ctx.fillRect(x - 13, top + 1, 26, th - 2); }
+    ctx.fillStyle = fg; ctx.globalAlpha = on ? 1 : .7; ctx.fillText(String(c+1), x, top + th/2 + .5); ctx.globalAlpha = 1;
+  }
+  for (let r = 0; r < ROWS; r++){
+    const y = (S + 1.5*S*r)*V.k + V.oy; if (y < top + th + 6 || y > H - 6) continue;
+    const on = r === sr; if (!on && (r+1) % rstep && rstep > 1) continue;
+    if (on){ ctx.fillStyle = mark; ctx.fillRect(1, y - 8, lw - 2, 16); }
+    ctx.fillStyle = fg; ctx.globalAlpha = on ? 1 : .7; ctx.fillText(String(r+1), lw/2, y + .5); ctx.globalAlpha = 1;
+  }
+  ctx.fillStyle = surface; ctx.fillRect(0, top, lw, th);   // empty corner
+}
 function paint(){
   raf = 0;
   try { paintMap(); }
@@ -749,17 +778,6 @@ function paintMap(){
         ctx.fillStyle = fg; ctx.fillText(t, cx, ty + S*.01); }
     }
   }
-  // coordinates, small at the top of each hex (column, row), as players call them in Discord
-  if (px >= 56){
-    ctx.font = `700 ${Math.max(S*.17, 10*lw)}px "Space Mono", monospace`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
-    for (let r=0;r<ROWS;r++) for (let c=0;c<COLS;c++){
-      const [cx,cy] = center(c,r); if (!vis(cx,cy)) continue;
-      const d = view(hid(c,r)); if (px >= 46 && d && (d.m||[]).some(m => m.label)) continue;   // the marker label sits there
-      const L = d && landInfo(d.t), t = `${c+1},${r+1}`, y = cy - S*.64;
-      ctx.lineWidth = S*.07; ctx.strokeStyle = L ? washOf(L.color) : unmade; ctx.strokeText(t, cx, y);
-      ctx.globalAlpha = .7; ctx.fillStyle = ink; ctx.fillText(t, cx, y); ctx.globalAlpha = 1;
-    }
-  }
   // highlight: dim every hex the chosen player never touched, outline the ones they did
   if (highlight){
     const dim = css("--void");
@@ -792,15 +810,15 @@ function paintMap(){
     for (let r=0;r<ROWS;r++) for (let c=0;c<COLS;c++){ if (changed.has(hid(c,r))) continue; const [cx,cy] = center(c,r); if (!vis(cx,cy)) continue; hexPath(cx,cy,S+.04); ctx.fill(); }
     ctx.globalAlpha = 1;
   }
-  // selection: one double outline around the whole group
+  // selection: a pencil outline around the whole group; ink is only for what's published
   if (selection.size){
-    ctx.strokeStyle = accent;
-    groupEdges(selection, S, .05); ctx.lineWidth = Math.max(2*lw, S*.09); ctx.stroke();
+    groupEdges(selection, S, .04); ctx.setLineDash([S*.14, S*.1]); ctx.strokeStyle = ink; ctx.lineWidth = Math.max(1.6*lw, S*.07); ctx.stroke(); ctx.setLineDash([]);
   }
   if (focusHex && document.activeElement === canvas && canvas.matches(":focus-visible")){
     const [cx,cy] = center(...focusHex); hexPath(cx,cy,S*.8);
     ctx.setLineDash([S*.25,S*.15]); ctx.strokeStyle = fg; ctx.lineWidth = Math.max(2*lw,S*.1); ctx.stroke(); ctx.setLineDash([]);
   }
+  drawRulers(px);
   updateHint();
 }
 
@@ -1263,13 +1281,6 @@ function peopleForm(onAdd){
   f.dataset.label = "Add";
   return f;
 }
-function recolorForm(pid){
-  const p = peoples.get(pid); let color = p.color;
-  const f = el("form",{class:"form", onsubmit:(e)=>{ e.preventDefault(); recolorPeople(pid, color); sheetForm = null; renderSheet(); draw(); toast(`${p.name}'s border changed.`); }});
-  f.append(el("div",{class:"row"}, swatch(p.color), el("strong",{}, p.name)), el("span",{class:"sub"},"Border color"), colorPicker(color, c => color = c));
-  f.dataset.label = "Save color";
-  return f;
-}
 function peopleOptions(ids){
   if (sheetForm === "other"){
     sheet.append(peopleForm(async (nm, color) => {
@@ -1277,17 +1288,11 @@ function peopleOptions(ids){
       applyAll(ids, id => setField(id,"p",pid), `Settled by ${nm}.`);
     })); return;
   }
-  if (sheetForm && sheetForm.startsWith("color:") && peoples.has(sheetForm.slice(6))){ sheet.append(recolorForm(sheetForm.slice(6))); return; }
   const o = el("div",{class:"opts"});
   for (const [pid,p] of peoples) o.append(el("button",{type:"button", class:"opt", onclick:()=>applyAll(ids, id=>setField(id,"p",pid), `Settled by ${p.name}.`)}, swatch(p.color), p.name));
   o.append(el("button",{type:"button", class:"opt other", onclick:()=>{ peopleForm.state = null; sheetForm="other"; renderSheet(); }}, "New people…"));
   o.append(el("button",{type:"button", class:"opt other", onclick:()=>applyAll(ids, id=>setField(id,"p",null), "No longer settled.")}, "Not settled"));
   sheet.append(o);
-  if (peoples.size){
-    const chips = el("div",{class:"chips"});
-    for (const [pid,p] of peoples) chips.append(el("button",{type:"button", class:"chip", style:"padding-right:12px", "aria-label":`Change ${p.name}'s border color`, onclick:()=>{ sheetForm = "color:" + pid; renderSheet(); }}, swatch(p.color), p.name));
-    sheet.append(el("p",{class:"sub"},"Change a border color"), chips);
-  }
 }
 function markerOptions(ids){
   // fast path: kind, then a colour; no typing
@@ -1563,11 +1568,30 @@ function readThemeCookie(){ try { const m = document.cookie.match(/(?:^|;\s*)soc
 function writeThemeCookie(t){ try { document.cookie = `soc-theme=${t}; max-age=31536000; path=/; SameSite=Lax`; } catch(e){} }
 const isDark = () => document.documentElement.dataset.mode === "dark";
 function setTheme(t){ document.documentElement.dataset.mode = t; writeThemeCookie(t); lsSet("soc-theme", t); }  // storage is a fallback where cookies are blocked
-function themeToggle(){
-  const b = el("button",{type:"button", class:"themetoggle", role:"switch", "aria-checked":String(isDark())},
-    el("span",{class:"tlabel"}, "Dark mode"), el("span",{class:"track","aria-hidden":"true"}, el("span",{class:"knob"})));
-  b.onclick = () => { setTheme(isDark() ? "light" : "dark"); b.setAttribute("aria-checked", String(isDark())); };
+function switchRow(label, get, set){
+  const b = el("button",{type:"button", class:"themetoggle", role:"switch", "aria-checked":String(get())},
+    el("span",{class:"tlabel"}, label), el("span",{class:"track","aria-hidden":"true"}, el("span",{class:"knob"})));
+  b.onclick = () => { set(!get()); b.setAttribute("aria-checked", String(get())); };
   return b;
+}
+const themeToggle = () => switchRow("Dark mode", isDark, on => setTheme(on ? "dark" : "light"));
+// rulers are on unless this device turned them off
+const rulersOn = () => lsGet("soc-rulers") !== "off";
+const rulersToggle = () => switchRow("Rulers", rulersOn, on => { lsSet("soc-rulers", on ? "on" : "off"); draw(); });
+// peoples' border colors, changed from the menu; the change is a draft like any other
+function openPeoples(pid){
+  if (pid && peoples.has(pid)){
+    const p = peoples.get(pid); let color = p.color;
+    openModal(p.name, [el("p",{class:"sub"},"Border color"), colorPicker(color, c => color = c),
+      el("div",{class:"row"},
+        el("button",{type:"button", class:"btn", onclick:()=>openPeoples()}, "Back"), el("span",{class:"grow"}),
+        el("button",{type:"button", class:"btn primary", onclick:()=>{ recolorPeople(pid, color); closeModal(); draw(); if (!sheet.hidden) renderSheet(); toast(`${p.name}'s border changed. Publish to share it.`); }}, "Save color"))]);
+    return;
+  }
+  const list = el("div",{class:"keylist"});
+  for (const [id,p] of peoples) list.append(el("button",{type:"button", class:"link", "aria-label":`${p.name}: change border color`, onclick:()=>openPeoples(id)},
+    el("span",{class:"row", style:"gap:10px"}, swatch(p.color), el("strong",{}, p.name)), el("span",{class:"when","aria-hidden":"true"}, "›")));
+  openModal("Peoples", peoples.size ? [el("p",{class:"note"}, "Tap a people to change its border color."), list] : [el("p",{class:"empty"}, "No peoples yet. Add one from a hex's Settled by.")]);
 }
 { const t = readThemeCookie() || lsGet("soc-theme"); document.documentElement.dataset.mode = t === "dark" ? "dark" : "light"; }
 function renderAge(){
@@ -1583,7 +1607,10 @@ $("menuBtn").onclick = () => {
     window.RULES_MD ? item("Rules", "How to play Songs of Creation", openRules) : null,
     item("Key", "What the colors and symbols mean", openKey),
     item("Age", `${AGES[age][0]} · one area is ${AGES[age][1]} ${AGES[age][1]===1?"hex":"hexes"}`, openWorld),
+    item("Peoples", peoples.size ? "Change border colors" : "None yet", () => openPeoples()),
     backend && backend.needsName ? item("Your name", myName() || "Not set yet", () => askName(null)) : null,
+    el("p",{class:"sub"}, "On this device"),
+    rulersToggle(),
     themeToggle()
   ]);
 };
