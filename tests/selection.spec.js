@@ -159,12 +159,3 @@ test("the map can't be dragged away off the screen", async ({ app }) => {
   expect(ax).toBeLessThan(390); expect(ay).toBeLessThan(760);
 });
 
-test("pulling down at the top of the map shows pull to refresh", async ({ app }) => {
-  await app.page.mouse.move(200, 300); await app.page.mouse.down();
-  await app.page.mouse.move(200, 520, { steps: 8 });
-  await expect(app.page.locator("#pull")).toHaveText("Release to refresh");
-  await app.page.mouse.move(200, 330, { steps: 4 });
-  await expect(app.page.locator("#pull")).toHaveText("Pull to refresh");
-  await app.page.mouse.move(200, 300, { steps: 2 }); await app.page.mouse.up();
-  await expect(app.page.locator("#pull")).toBeHidden();
-});

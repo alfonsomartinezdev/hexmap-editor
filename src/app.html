@@ -49,7 +49,6 @@ canvas{display:block;width:100%;height:100%;touch-action:none;-webkit-touch-call
 .banner{position:absolute;left:10px;right:10px;top:64px;background:var(--fg);color:var(--bg);border-radius:10px;padding:8px 8px 8px 12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:.9rem}
 .banner span{flex:1;min-width:0}
 .banner button{min-height:40px;padding:0 12px;border-radius:8px;border:0;background:var(--bg);color:var(--fg);font-weight:700;cursor:pointer}
-.pull{position:absolute;left:50%;top:80px;transform:translateX(-50%);background:var(--raise);color:var(--fg);border:2px solid var(--line);box-shadow:var(--hard);padding:8px 14px;border-radius:12px 9px 13px 10px;font-weight:700;font-size:.9rem;pointer-events:none;z-index:5}
 .toast{position:absolute;left:50%;bottom:12px;transform:translateX(-50%);background:var(--fg);color:var(--bg);padding:10px 14px;border-radius:10px;font-size:.9rem;max-width:calc(100% - 140px);text-align:center;pointer-events:none;transition:opacity .2s}
 
 .menubtn{position:absolute;left:10px;top:10px;min-height:44px;display:flex;align-items:center;gap:10px;padding:0 14px 0 12px;border-radius:12px;border:1px solid var(--line);background:var(--raise);font-size:.9rem;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.15);max-width:calc(100% - 190px)}
@@ -252,7 +251,6 @@ canvas.nat,.rowbtn .rv canvas.nat,.opt canvas.nat{border:0;border-radius:0;backg
       <button class="zbtn small" id="zfit" aria-label="Fit whole map">Fit</button>
     </div>
     <div class="banner" id="histBanner" hidden><span id="histText"></span><button id="histBack">Back to now</button></div>
-    <div class="pull" id="pull" hidden aria-live="polite"></div>
     <div class="toast" id="toast" style="opacity:0" aria-hidden="true"></div>
     <div class="sr" id="live" aria-live="polite"></div>
   </main>
@@ -904,7 +902,7 @@ canvas.addEventListener("pointermove", e => {
     const dx = e.offsetX-G.sx, dy = e.offsetY-G.sy; if (Math.abs(dx)+Math.abs(dy) > 6){ G.moved = true; if (G.hold) clearTimeout(G.hold); }
     V.ox = G.ox+dx; V.oy = G.oy+dy; clampView();
     // dragging down past the top of the map: pull to refresh, like a normal page
-    G.pull = pts.size === 1 ? Math.max(0, (G.oy + dy) - V.oy) : 0; showPull(G.pull);
+    G.pull = pts.size === 1 ? Math.max(0, (G.oy + dy) - V.oy) : 0;
     draw();
   } else if (G.type === "pinch" && pts.size >= 2){
     const [a,b] = [...pts.values()], d = Math.hypot(a.x-b.x,a.y-b.y), mx=(a.x+b.x)/2, my=(a.y+b.y)/2;
@@ -912,18 +910,12 @@ canvas.addEventListener("pointermove", e => {
     V.k = k2; V.ox = mx-(G.mx-G.ox)*k2/G.k; V.oy = my-(G.my-G.oy)*k2/G.k; draw();
   }
 });
-const PULL = 110;
-function showPull(d){
-  const el = $("pull"); if (!el) return;
-  el.hidden = d < 12; if (el.hidden) return;
-  el.textContent = d > PULL ? "Release to refresh" : "Pull to refresh";
-  el.style.transform = `translate(-50%, ${Math.min(d*.5, 70)}px)`;
-}
+const PULL = 110;   // drag this far down past the top of the map and let go to reload, like a normal page
 function endPointer(e){
   if (!pts.has(e.pointerId)) return;
   pts.delete(e.pointerId);
   if (G && G.hold) clearTimeout(G.hold);
-  if (G && G.pull){ const go = G.pull > PULL; showPull(0); if (go){ G = null; pts.clear(); $("pull").textContent = "Refreshing…"; $("pull").hidden = false; location.reload(); return; } }
+  if (G && G.pull > PULL){ G = null; pts.clear(); location.reload(); return; }
   if (G && pts.size === 0){
     if (G.type === "pending") tap(e.offsetX, e.offsetY);
     else if (G.type === "pan" && !G.moved && histIdx === null) tap(e.offsetX, e.offsetY); // view-only players can still look at hexes
