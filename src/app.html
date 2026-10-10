@@ -1530,15 +1530,15 @@ function showHistory(i){
 $("histBack").onclick = () => showHistory(null);
 
 // Clear map = start a new map. The old one is kept in the database, untouched, but nothing shows it.
-// Only the age carries over; custom lands, natures and peoples start again too.
-function seedPost(){ return newPost({ changes: {}, world: { age, newMap: true } }); }
+// Nothing carries over: no custom lands, natures or peoples, and the age is back to the First Age.
+function seedPost(){ return newPost({ changes: {}, world: { age: 1, newMap: true } }); }
 function openClear(step){
   const mine = draft.size;
   if (step !== 2){
     openModal("Clear the map?", [
       el("p",{}, "This starts a fresh, empty map for everyone, with no history."),
       el("p",{class:"warnbox"}, "Only do this if the whole table has agreed to start over."),
-      el("p",{class:"note"}, "Custom lands, natures and peoples are cleared too. The age stays the same."),
+      el("p",{class:"note"}, "Custom lands, natures and peoples are cleared too, and it goes back to the First Age."),
       el("div",{class:"row"}, el("button",{type:"button", class:"btn", onclick:closeModal}, "Cancel"), el("span",{class:"grow"}),
         el("button",{type:"button", class:"btn danger", onclick:()=>openClear(2)}, "Continue"))]);
     return;
