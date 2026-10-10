@@ -136,7 +136,9 @@ canvas{display:block;width:100%;height:100%;touch-action:none;-webkit-touch-call
 .mpanel.tall{height:100%;max-height:100%;border-radius:0}
 .grab{width:44px;height:5px;border-radius:3px;background:var(--line);opacity:.35;margin:8px auto -4px;flex:0 0 auto}
 .mpanel.dragging{transition:none}
-.mpanel.settle{transition:transform .18s ease-out}
+.mpanel.settle{transition:transform .2s ease-out}
+.modal{transition:background-color .2s ease-out}
+.modal.closing{background:transparent;pointer-events:none}
 .mpanel.tall .mbody{display:block;padding-top:0}
 .toc{position:sticky;top:0;z-index:1;display:flex;gap:6px;overflow-x:auto;padding:10px 0;margin-bottom:4px;background:var(--surface);border-bottom:1px solid var(--line);scrollbar-width:none}
 .toc .chip{flex:0 0 auto;padding-right:12px;cursor:pointer}
@@ -1475,14 +1477,29 @@ async function addPeople(name, color){
 /* ================= modal: key, history, settings ================= */
 const modal = $("modal"); let lastFocus = null;
 function openModal(title, body, opts){
+  if (typeof resetSlide === "function") resetSlide();      // a new panel cancels one that is still sliding away
   $("hint").hidden = true;
   modal.querySelector(".mpanel").classList.toggle("tall", !!(opts && opts.tall));
   lastFocus = document.activeElement; $("mTitle").textContent = title; const b = $("mBody"); b.textContent = ""; b.append(...[body].flat().filter(x => x != null && x !== false));
   modal.hidden = false; $("mClose").focus();
 }
 function closeModal(){ modal.hidden = true; updateHint(); if (lastFocus && lastFocus.focus) lastFocus.focus(); }
-$("mClose").onclick = closeModal;
-modal.addEventListener("click", e => { if (e.target === modal) closeModal(); });
+$("mClose").onclick = slideClosed;
+function resetSlide(){
+  const panel = modal.querySelector(".mpanel");
+  clearTimeout(slideClosed.timer); slideClosed.timer = null;
+  modal.classList.remove("closing"); panel.classList.remove("settle","dragging"); panel.style.transform = "";
+}
+// close by sliding the panel down and fading the backdrop (swipe, Close, or a tap outside)
+function slideClosed(){
+  const panel = modal.querySelector(".mpanel");
+  if (modal.hidden || modal.classList.contains("closing")) return;
+  if (matchMedia("(prefers-reduced-motion: reduce)").matches){ closeModal(); return; }
+  modal.classList.add("closing"); panel.classList.remove("dragging"); panel.classList.add("settle");
+  panel.style.transform = "translateY(100%)";
+  slideClosed.timer = setTimeout(() => { slideClosed.timer = null; resetSlide(); closeModal(); }, 200);
+}
+modal.addEventListener("click", e => { if (e.target === modal) slideClosed(); });
 // swipe the panel down to close it (from the top of its list, so scrolling the list still works)
 {
   const panel = modal.querySelector(".mpanel"), body = $("mBody"); let d = null;
@@ -1500,8 +1517,8 @@ modal.addEventListener("click", e => { if (e.target === modal) closeModal(); });
   }, {passive:false});
   const end = () => {
     if (!d) return; const fast = d.dy / Math.max(1, performance.now() - d.t) > .6, go = d.ok && (d.dy > 110 || (fast && d.dy > 40)); d = null;
+    if (go){ slideClosed(); return; }
     panel.classList.remove("dragging"); panel.classList.add("settle"); panel.style.transform = "";
-    if (go) closeModal();
   };
   panel.addEventListener("touchend", end); panel.addEventListener("touchcancel", end);
 }
