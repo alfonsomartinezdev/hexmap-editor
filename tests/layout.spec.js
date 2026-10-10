@@ -51,11 +51,11 @@ test("controls are at least 44 pixels for thumbs", async ({ app }) => {
   expect(small).toEqual([]);
 });
 
-test("the menu holds History, Rules, Key and Age, with no map-size control", async ({ app }) => {
+test("the menu holds History, Rules, Key, Age and Peoples, with no map-size control", async ({ app }) => {
   await app.open();
   await app.page.locator("#menuBtn").click();
   const items = await app.page.locator("#mBody button.link strong").allTextContents();
-  expect(items).toEqual(["History", "Rules", "Key", "Age"]);
+  expect(items).toEqual(["History", "Rules", "Key", "Age", "Peoples"]);
   await app.page.locator("#mBody button.link", { hasText: /^Age/ }).click();
   await expect(app.page.locator("#cols, #rows")).toHaveCount(0);
   await app.page.getByRole("button", { name: "Close" }).click();
@@ -161,3 +161,17 @@ test("dark mode off stays off even when the surrounding page says dark", async (
   const bg = await app.page.evaluate(() => getComputedStyle(document.body).backgroundColor);
   expect(bg).toBe("rgb(236, 235, 229)");
 });
+
+test("rulers can be hidden from the menu, and that is remembered", async ({ app }) => {
+  await app.open();
+  await app.page.locator("#menuBtn").click();
+  const sw = app.page.getByRole("switch", { name: "Rulers" });
+  await expect(sw).toHaveAttribute("aria-checked", "true");
+  await sw.click();
+  await expect(sw).toHaveAttribute("aria-checked", "false");
+  expect(await app.page.evaluate(() => localStorage.getItem("soc-rulers"))).toBe("off");
+  await app.page.reload(); await app.page.waitForFunction(() => window.__soc);
+  await app.page.locator("#menuBtn").click();
+  await expect(app.page.getByRole("switch", { name: "Rulers" })).toHaveAttribute("aria-checked", "false");
+});
+
