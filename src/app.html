@@ -497,11 +497,11 @@ function landFill(L){
   const key = L.color + "|" + L.pen + "|" + (isDark() ? "d" : "l");
   if (patCache.has(key)) return patCache.get(key);
   const pat = ctx.createPattern(hatchTile(L.color, L.pen), "repeat");
-  pat.setTransform(new DOMMatrix().scale(15 / 120));                // one tile = 15 map units, about one hex
+  // no pat.setTransform: some Safari/iOS versions throw on it. The fill scales the context instead.
   patCache.set(key, pat); return pat;
 }
 // the same hatching for the little tiles in menus and pickers
-function hatchOn(c2, color, pen, d){ const pat = c2.createPattern(hatchTile(color, pen), "repeat"); pat.setTransform(new DOMMatrix().scale(d / 120)); c2.fillStyle = pat; c2.fillRect(0,0,d,d); }
+function hatchOn(c2, color, pen, d){ const pat = c2.createPattern(hatchTile(color, pen), "repeat"); c2.save(); c2.scale(d / 120, d / 120); c2.fillStyle = pat; c2.fillRect(0,0,120,120); c2.restore(); }
 const hatchURL = (color, pen) => { const t = hatchTile(color, pen); return t._url || (t._url = t.toDataURL()); };
 
 function glyph(g, cx, cy, s, ink, label, c2){
@@ -648,6 +648,10 @@ function groupEdges(ids, s, amt){
 }
 function paint(){
   raf = 0;
+  try { paintMap(); }
+  catch(e){ console.error("paint failed", e); try { ctx.restore(); } catch(_){} }
+}
+function paintMap(){
   ctx.setTransform(DPR,0,0,DPR,0,0); ctx.fillStyle = css("--void"); ctx.fillRect(0,0,W,H);
   ctx.setTransform(DPR*V.k,0,0,DPR*V.k,DPR*V.ox,DPR*V.oy);
   const unmade = css("--unmade"), grid = css("--grid"), accent = css("--accent-line"), sel = css("--sel"), ink = css("--line"), dcol = css("--draft"), surface = css("--surface"), fg = css("--fg");
@@ -660,7 +664,9 @@ function paint(){
   for (let r=0;r<ROWS;r++) for (let c=0;c<COLS;c++){
     const [cx,cy] = center(c,r); if (!vis(cx,cy)) continue;
     const id = hid(c,r), d = view(id), L = d && landInfo(d.t);
-    if (L){ roughHex(cx,cy,S*1.03,seedOf(c,r),.04); ctx.fillStyle = px >= 14 ? landFill(L) : flatOf(L.color); ctx.fill();
+    if (L){ roughHex(cx,cy,S*1.03,seedOf(c,r),.04);
+      if (px >= 14){ ctx.save(); ctx.scale(15/120, 15/120); ctx.fillStyle = landFill(L); ctx.fill(); ctx.restore(); }   // the path is already set, so the scale only sizes the hatching: one tile = 15 map units
+      else { ctx.fillStyle = flatOf(L.color); ctx.fill(); }
       if (px > 9){ ctx.strokeStyle = isDark() ? "rgba(243,240,230,.1)" : "rgba(20,20,20,.09)"; ctx.lineWidth = Math.max(lw, S*.025); ctx.lineJoin = "round"; ctx.stroke(); } }
     else { hexPath(cx,cy,S+.03); ctx.fillStyle = unmade; ctx.fill();
       if (px > 9){ roughHex(cx,cy,S*.97,seedOf(c,r),.05); ctx.strokeStyle = grid; ctx.lineWidth = lw; ctx.globalAlpha = gridA; ctx.stroke(); ctx.globalAlpha = 1; } }
