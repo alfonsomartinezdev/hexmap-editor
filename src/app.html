@@ -1530,24 +1530,15 @@ function showHistory(i){
 $("histBack").onclick = () => showHistory(null);
 
 // Clear map = start a new map. The old one is kept in the database, untouched, but nothing shows it.
-// Lands, natures, peoples and the age carry over in the new map's first post.
-function seedPost(){
-  const types = {}, ppl = {};
-  for (const [k,v] of customLand) types[k.slice(2)] = {kind:"land", name:v.name, color:v.color, pen:penFor(v)};
-  for (const [nm,g] of customNat) types["n" + rid()] = g ? {kind:"nature", name:nm, glyph:g} : {kind:"nature", name:nm};
-  for (const [id,v] of peoples) ppl[id] = {name:v.name, color:v.color};
-  const post = newPost({ changes: {}, world: { age, newMap: true } });
-  if (Object.keys(types).length) post.types = types;
-  if (Object.keys(ppl).length) post.peoples = ppl;
-  return post;
-}
+// Only the age carries over; custom lands, natures and peoples start again too.
+function seedPost(){ return newPost({ changes: {}, world: { age, newMap: true } }); }
 function openClear(step){
   const mine = draft.size;
   if (step !== 2){
     openModal("Clear the map?", [
       el("p",{}, "This starts a fresh, empty map for everyone, with no history."),
       el("p",{class:"warnbox"}, "Only do this if the whole table has agreed to start over."),
-      el("p",{class:"note"}, "Lands, natures and peoples stay available to pick. The age stays the same."),
+      el("p",{class:"note"}, "Custom lands, natures and peoples are cleared too. The age stays the same."),
       el("div",{class:"row"}, el("button",{type:"button", class:"btn", onclick:closeModal}, "Cancel"), el("span",{class:"grow"}),
         el("button",{type:"button", class:"btn danger", onclick:()=>openClear(2)}, "Continue"))]);
     return;

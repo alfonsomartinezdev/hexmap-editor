@@ -157,11 +157,15 @@ test("Clear map needs two confirmations, then starts an empty map with no histor
   await app.page.getByRole("button", { name: "Clear the map" }).click();
   await expect.poll(() => app.page.evaluate(() => window.__fakeFirebase.current.length)).toBe(1);
   await expect.poll(() => app.view("h16_26")).toBeNull();
-  // history starts again: just the new map's first post, which carries the lands and peoples over
+  // history starts again with just the new map's first post; custom lands and peoples are gone too
   await expect.poll(async () => (await app.state()).posts.length).toBe(1);
   const [seed] = (await app.state()).posts;
   expect(seed.world).toMatchObject({ newMap: true, age: 1 });
-  expect(await app.page.evaluate(() => window.__soc.landInfo("x-ab").name)).toBe("Dunes");
+  expect(seed.types).toBeUndefined(); expect(seed.peoples).toBeUndefined();
+  expect(await app.page.evaluate(() => window.__soc.landInfo("x-ab").name)).toBe("Other land");
+  await app.page.locator("#menuBtn").click();
+  await expect(app.page.locator("#mBody button.link", { hasText: /^Peoples/ })).toContainText("None yet");
+  await app.page.getByRole("button", { name: "Close" }).click();
   // new posts go to the new map
   await app.tapHex(18, 26); await app.button("Water").click(); await app.done();
   await publish(app);
