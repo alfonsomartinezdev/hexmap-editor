@@ -627,12 +627,30 @@ function marker(shape, x, y, r, color, inkC, seed){ drawMarker(ctx, shape, x, y,
 // where the pieces go: one in the middle, then pairs, a triangle, a square; more than four shows three and a count
 const MARKER_SPOTS = {1:[[0,-.12]], 2:[[-.36,-.12],[.36,-.12]], 3:[[-.34,-.3],[.34,-.3],[0,.12]], 4:[[-.31,-.3],[.31,-.3],[-.31,.12],[.31,.12]]};
 const MARKER_R = {1:.36, 2:.27, 3:.24, 4:.21};
+// one hand-drawn hex edge (i matches edgeNeighbors). Corners wobble by their position on the map,
+// so edges drawn from two different hexes still meet at the same point.
+function roughEdge(cx, cy, s, i, amt){
+  const a1 = Math.PI/180*(60*i-30), a2 = Math.PI/180*(60*(i+1)-30);
+  const V = a => { const vx = cx + S*Math.cos(a), vy = cy + S*Math.sin(a), k = Math.round(vx*3.1) + Math.round(vy*5.3)*7;
+    return [cx + s*Math.cos(a) + wob(k)*S*amt, cy + s*Math.sin(a) + wob(k+11)*S*amt]; };
+  const [x1,y1] = V(a1), [x2,y2] = V(a2), mk = Math.round((x1+x2)*2.3) + Math.round((y1+y2)*4.1)*5;
+  ctx.moveTo(x1, y1); ctx.quadraticCurveTo((x1+x2)/2 + wob(mk)*S*amt*1.6, (y1+y2)/2 + wob(mk+3)*S*amt*1.6, x2, y2);
+}
+// the outside edges of a group of hexes: where the neighbour is not in the group
+function groupEdges(ids, s, amt){
+  ctx.beginPath();
+  for (const id of ids){
+    const [c,r] = parse(id); if (!inB(c,r)) continue; const [cx,cy] = center(c,r);
+    edgeNeighbors(c,r).forEach(([nc,nr], i) => { if (!ids.has(hid(nc,nr))) roughEdge(cx, cy, s, i, amt); });
+  }
+}
 function paint(){
   raf = 0;
   ctx.setTransform(DPR,0,0,DPR,0,0); ctx.fillStyle = css("--void"); ctx.fillRect(0,0,W,H);
   ctx.setTransform(DPR*V.k,0,0,DPR*V.k,DPR*V.ox,DPR*V.oy);
   const unmade = css("--unmade"), grid = css("--grid"), accent = css("--accent-line"), sel = css("--sel"), ink = css("--line"), dcol = css("--draft"), surface = css("--surface"), fg = css("--fg");
   const px = hexPx(), lw = 1/V.k;
+  const gridA = px < 14 ? .3 : px < 34 ? .3 + .25*(px-14)/20 : .55;   // the empty grid is quiet, and quieter still zoomed out
   patCache.size > 40 && patCache.clear();
   const [x0,y0] = toWorld(-30,-30), [x1,y1] = toWorld(W+30,H+30);
   const vis = (cx,cy) => cx>=x0 && cx<=x1 && cy>=y0 && cy<=y1;
@@ -643,7 +661,7 @@ function paint(){
     if (L){ roughHex(cx,cy,S*1.03,seedOf(c,r),.04); ctx.fillStyle = px >= 14 ? landFill(L) : washOf(L.color); ctx.fill();
       if (px > 9){ ctx.strokeStyle = isDark() ? "rgba(243,240,230,.18)" : "rgba(20,20,20,.16)"; ctx.lineWidth = Math.max(lw, S*.025); ctx.lineJoin = "round"; ctx.stroke(); } }
     else { hexPath(cx,cy,S+.03); ctx.fillStyle = unmade; ctx.fill();
-      if (px > 9){ roughHex(cx,cy,S*.97,seedOf(c,r),.05); ctx.strokeStyle = grid; ctx.lineWidth = lw; ctx.stroke(); } }
+      if (px > 9){ roughHex(cx,cy,S*.97,seedOf(c,r),.05); ctx.strokeStyle = grid; ctx.lineWidth = lw; ctx.globalAlpha = gridA; ctx.stroke(); ctx.globalAlpha = 1; } }
     if (selection.has(id)){ roughHex(cx,cy,S*.96,seedOf(c,r)+5,.05); ctx.fillStyle = sel; ctx.fill(); }
     if (d) cells.push([c,r,cx,cy,d,L]);
   }
@@ -665,18 +683,21 @@ function paint(){
       }
     }
   }
-  // peoples: tint + border where the neighbor differs
+  // peoples: a light tint and a colored-pencil line just inside the edge of their land
+  const byPeople = new Map();
   for (const [c,r,cx,cy,d] of cells){
     if (!d.p || !peoples.has(d.p)) continue;
-    const col = peoples.get(d.p).color, nb = edgeNeighbors(c,r);
-    hexPath(cx,cy,S); ctx.globalAlpha = .14; ctx.fillStyle = col; ctx.fill(); ctx.globalAlpha = 1;
-    ctx.strokeStyle = col; ctx.lineWidth = Math.max(2.5*lw, S*.16); ctx.lineCap = "round";
-    for (let i=0;i<6;i++){
-      const [nc,nr] = nb[i]; const nd = inB(nc,nr) ? view(hid(nc,nr)) : null;
-      if (nd && nd.p === d.p) continue;
-      const a1 = Math.PI/180*(60*i-30), a2 = Math.PI/180*(60*(i+1)-30), s = S*.86;
-      ctx.beginPath(); ctx.moveTo(cx+s*Math.cos(a1),cy+s*Math.sin(a1)); ctx.lineTo(cx+s*Math.cos(a2),cy+s*Math.sin(a2)); ctx.stroke();
-    }
+    roughHex(cx,cy,S*.98,seedOf(c,r)+3,.04); ctx.globalAlpha = .13; ctx.fillStyle = peoples.get(d.p).color; ctx.fill(); ctx.globalAlpha = 1;
+    if (!byPeople.has(d.p)) byPeople.set(d.p, new Set()); byPeople.get(d.p).add(hid(c,r));
+  }
+  for (const [pid, ids] of byPeople){
+    // the whole people counts as the group, even hexes scrolled out of view, so borders don't appear at the screen edge
+    const all = new Set(ids); for (const [id,d] of base) if (d.p === pid) all.add(id); for (const [id] of draft){ const d = view(id); if (d && d.p === pid) all.add(id); else all.delete(id); }
+    const col = peoples.get(pid).color; ctx.strokeStyle = col; ctx.lineCap = "round"; ctx.lineJoin = "round";
+    ctx.beginPath(); for (const id of ids){ const [c,r] = parse(id), [cx,cy] = center(c,r); edgeNeighbors(c,r).forEach(([nc,nr], i) => { if (!all.has(hid(nc,nr))) roughEdge(cx, cy, S*.95, i, .05); }); }
+    ctx.lineWidth = Math.max(2*lw, S*.13); ctx.globalAlpha = .85; ctx.stroke();
+    ctx.beginPath(); for (const id of ids){ const [c,r] = parse(id), [cx,cy] = center(c,r); edgeNeighbors(c,r).forEach(([nc,nr], i) => { if (!all.has(hid(nc,nr))) roughEdge(cx+S*.02, cy-S*.02, S*.9, i, .08); }); }
+    ctx.lineWidth = Math.max(lw, S*.05); ctx.stroke(); ctx.globalAlpha = 1;
   }
   // rivers sit on top of the land: link to neighbouring river hexes and to sea or lake
   for (const [c,r,cx,cy,d] of cells){
@@ -723,8 +744,8 @@ function paint(){
     }
   }
   // coordinates, small at the top of each hex (column, row), as players call them in Discord
-  if (px >= 40){
-    ctx.font = `700 ${S*.17}px "Space Mono", monospace`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  if (px >= 56){
+    ctx.font = `700 ${Math.max(S*.17, 10*lw)}px "Space Mono", monospace`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
     for (let r=0;r<ROWS;r++) for (let c=0;c<COLS;c++){
       const [cx,cy] = center(c,r); if (!vis(cx,cy)) continue;
       const d = view(hid(c,r)); if (px >= 46 && d && (d.m||[]).some(m => m.label)) continue;   // the marker label sits there
@@ -744,18 +765,19 @@ function paint(){
     }
   }
   // draft marks, history outlines, selection, focus
-  if (histIdx === null) for (const id of draft.keys()){
-    const [c,r] = parse(id); if (!inB(c,r)) continue; const [cx,cy] = center(c,r); if (!vis(cx,cy)) continue;
-    ctx.fillStyle = dcol; ctx.beginPath(); ctx.arc(cx-S*.66,cy,Math.max(S*.11, 2.5*lw),0,Math.PI*2); ctx.fill();
-  } else for (const id of Object.keys(posts[histIdx].changes||{})){
-    const [c,r] = parse(id); if (!inB(c,r)) continue; const [cx,cy] = center(c,r); if (!vis(cx,cy)) continue;
-    hexPath(cx,cy,S*.9); ctx.strokeStyle = accent; ctx.lineWidth = Math.max(2.5*lw, S*.13); ctx.stroke();
+  ctx.lineCap = "round"; ctx.lineJoin = "round";
+  if (histIdx === null){
+    // unpublished changes: a dashed pencil line around them, not inked yet
+    if (draft.size){ groupEdges(new Set(draft.keys()), S*.9, .04); ctx.setLineDash([S*.2, S*.16]); ctx.strokeStyle = dcol; ctx.lineWidth = Math.max(1.6*lw, S*.08); ctx.stroke(); ctx.setLineDash([]); }
+  } else {
+    // a post in history: the hexes it changed, outlined by hand
+    groupEdges(new Set(Object.keys(posts[histIdx].changes||{})), S*.92, .05); ctx.strokeStyle = accent; ctx.lineWidth = Math.max(2.5*lw, S*.12); ctx.stroke();
   }
-  for (const id of selection){
-    const [c,r] = parse(id); const [cx,cy] = center(c,r); if (!vis(cx,cy)) continue;
-    roughHex(cx,cy,S*.96,seedOf(c,r)+5,.05);
-    ctx.strokeStyle = accent; ctx.lineJoin = "round"; ctx.lineWidth = Math.max(2*lw, S*.09); ctx.stroke();
-    roughHex(cx,cy,S*.93,seedOf(c,r)+11,.07); ctx.lineWidth = Math.max(1.2*lw, S*.045); ctx.stroke();
+  // selection: one double outline around the whole group
+  if (selection.size){
+    ctx.strokeStyle = accent;
+    groupEdges(selection, S, .05); ctx.lineWidth = Math.max(2*lw, S*.1); ctx.stroke();
+    groupEdges(selection, S*.94, .08); ctx.lineWidth = Math.max(1.2*lw, S*.045); ctx.stroke();
   }
   if (focusHex && document.activeElement === canvas && canvas.matches(":focus-visible")){
     const [cx,cy] = center(...focusHex); hexPath(cx,cy,S*.8);
