@@ -778,14 +778,6 @@ function paintMap(){
         ctx.fillStyle = fg; ctx.fillText(t, cx, ty + S*.01); }
     }
   }
-  // the selected hex keeps its coordinate on the map; every other hex reads it off the rulers
-  if (selection.size === 1 && px >= 40){
-    const [c,r] = parse([...selection][0]), [cx,cy] = center(c,r), d = view(hid(c,r));
-    if (vis(cx,cy) && !(px >= 46 && d && (d.m||[]).some(m => m.label))){
-      ctx.font = `700 ${Math.max(S*.17, 10*lw)}px "Space Mono", monospace`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
-      const t = `${c+1},${r+1}`, y = cy - S*.64; ctx.lineWidth = Math.max(S*.08, 3*lw); ctx.strokeStyle = surface; ctx.strokeText(t, cx, y); ctx.fillStyle = fg; ctx.fillText(t, cx, y);
-    }
-  }
   // highlight: dim every hex the chosen player never touched, outline the ones they did
   if (highlight){
     const dim = css("--void");
@@ -818,10 +810,9 @@ function paintMap(){
     for (let r=0;r<ROWS;r++) for (let c=0;c<COLS;c++){ if (changed.has(hid(c,r))) continue; const [cx,cy] = center(c,r); if (!vis(cx,cy)) continue; hexPath(cx,cy,S+.04); ctx.fill(); }
     ctx.globalAlpha = 1;
   }
-  // selection: one double outline around the whole group
+  // selection: a pencil outline around the whole group; ink is only for what's published
   if (selection.size){
-    ctx.strokeStyle = accent;
-    groupEdges(selection, S, .05); ctx.lineWidth = Math.max(2*lw, S*.09); ctx.stroke();
+    groupEdges(selection, S, .04); ctx.setLineDash([S*.14, S*.1]); ctx.strokeStyle = ink; ctx.lineWidth = Math.max(1.6*lw, S*.07); ctx.stroke(); ctx.setLineDash([]);
   }
   if (focusHex && document.activeElement === canvas && canvas.matches(":focus-visible")){
     const [cx,cy] = center(...focusHex); hexPath(cx,cy,S*.8);
