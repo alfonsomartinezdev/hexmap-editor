@@ -148,3 +148,23 @@ test("a double tap while hexes are selected keeps that selection as it was", asy
   expect((await app.state()).selection).toEqual(["h16_22"]);
 });
 
+
+test("the map can't be dragged away off the screen", async ({ app }) => {
+  await app.zoomIn();
+  const [x, y] = await app.at(16, 26);
+  await app.page.mouse.move(200, 300); await app.page.mouse.down();
+  await app.page.mouse.move(200 - 3000, 300 - 3000, { steps: 10 }); await app.page.mouse.up();
+  const [ax, ay] = await app.at(31, 52);              // the bottom-right hex stays in reach
+  expect(ax).toBeGreaterThan(0); expect(ay).toBeGreaterThan(0);
+  expect(ax).toBeLessThan(390); expect(ay).toBeLessThan(760);
+});
+
+test("pulling down at the top of the map shows pull to refresh", async ({ app }) => {
+  await app.page.mouse.move(200, 300); await app.page.mouse.down();
+  await app.page.mouse.move(200, 520, { steps: 8 });
+  await expect(app.page.locator("#pull")).toHaveText("Release to refresh");
+  await app.page.mouse.move(200, 330, { steps: 4 });
+  await expect(app.page.locator("#pull")).toHaveText("Pull to refresh");
+  await app.page.mouse.move(200, 300, { steps: 2 }); await app.page.mouse.up();
+  await expect(app.page.locator("#pull")).toBeHidden();
+});
