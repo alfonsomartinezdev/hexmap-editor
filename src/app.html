@@ -654,7 +654,8 @@ function drawRulers(px){
   const sb = stage.getBoundingClientRect(), tops = [$("menuBtn"), document.querySelector(".showbox")].map(e => e.getBoundingClientRect().bottom - sb.top);
   const top = Math.max(...tops) + 6, th = 18, lw = 26, rowH = px * .866;
   const surface = css("--surface"), line = css("--line"), fg = css("--fg"), mark = css("--accent");
-  const [sc, sr] = selection.size === 1 ? parse([...selection][0]) : [-1, -1];
+  // every column and row that has a selected hex is marked
+  const selC = new Set(), selR = new Set(); for (const id of selection){ const [c,r] = parse(id); selC.add(c); selR.add(r); }
   const cstep = px >= 24 ? 1 : px >= 12 ? 5 : 10, rstep = rowH >= 16 ? 1 : rowH >= 8 ? 5 : 10;
   ctx.font = `700 10px "Space Mono", monospace`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
   // strips
@@ -663,13 +664,13 @@ function drawRulers(px){
   // columns, lined up with the even rows (odd rows sit half a hex to the right)
   for (let c = 0; c < COLS; c++){
     const x = (SQ3*S*(c + .5))*V.k + V.ox; if (x < lw + 6 || x > W - 6) continue;
-    const on = c === sc; if (!on && (c+1) % cstep && cstep > 1) continue;
+    const on = selC.has(c); if (!on && (c+1) % cstep && cstep > 1) continue;
     if (on){ ctx.fillStyle = mark; ctx.fillRect(x - 13, top + 1, 26, th - 2); }
     ctx.fillStyle = fg; ctx.globalAlpha = on ? 1 : .7; ctx.fillText(String(c+1), x, top + th/2 + .5); ctx.globalAlpha = 1;
   }
   for (let r = 0; r < ROWS; r++){
     const y = (S + 1.5*S*r)*V.k + V.oy; if (y < top + th + 6 || y > H - 6) continue;
-    const on = r === sr; if (!on && (r+1) % rstep && rstep > 1) continue;
+    const on = selR.has(r); if (!on && (r+1) % rstep && rstep > 1) continue;
     if (on){ ctx.fillStyle = mark; ctx.fillRect(1, y - 8, lw - 2, 16); }
     ctx.fillStyle = fg; ctx.globalAlpha = on ? 1 : .7; ctx.fillText(String(r+1), lw/2, y + .5); ctx.globalAlpha = 1;
   }
