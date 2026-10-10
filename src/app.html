@@ -87,6 +87,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;-webkit-touch-call
 .btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
 .btn.quiet{border-color:transparent;background:transparent;color:var(--muted)}
 .btn.danger{color:var(--danger)}
+.warnbox{border:2px solid var(--line);border-radius:10px 14px 12px 9px;background:var(--accent);color:#141414;padding:10px 12px;font-weight:700;margin:4px 0 8px}
 .btn:disabled{opacity:.5;cursor:default}
 .sfoot{position:sticky;bottom:0;margin:0 -16px;padding:10px 16px;background:var(--surface);border-top:1px solid var(--line);display:flex;align-items:center;gap:8px}
 .sfoot .what{flex:1;min-width:0;color:var(--muted);font-size:.9rem}
@@ -1529,6 +1530,7 @@ function openClear(step){
   if (step !== 2){
     openModal("Clear the map?", [
       el("p",{}, "This starts a fresh, empty map for everyone, with no history."),
+      el("p",{class:"warnbox"}, "Only do this if the whole table has agreed to start over."),
       el("p",{class:"note"}, "Lands, natures and peoples stay available to pick. The age stays the same."),
       el("div",{class:"row"}, el("button",{type:"button", class:"btn", onclick:closeModal}, "Cancel"), el("span",{class:"grow"}),
         el("button",{type:"button", class:"btn danger", onclick:()=>openClear(2)}, "Continue"))]);
