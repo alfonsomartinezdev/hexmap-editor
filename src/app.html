@@ -686,11 +686,10 @@ function paint(){
       }
     }
   }
-  // peoples: a light tint and a colored-pencil line just inside the edge of their land
+  // peoples: a colored marker line just inside the edge of their land
   const byPeople = new Map();
   for (const [c,r,cx,cy,d] of cells){
     if (!d.p || !peoples.has(d.p)) continue;
-    roughHex(cx,cy,S*.98,seedOf(c,r)+3,.04); ctx.globalAlpha = .13; ctx.fillStyle = peoples.get(d.p).color; ctx.fill(); ctx.globalAlpha = 1;
     if (!byPeople.has(d.p)) byPeople.set(d.p, new Set()); byPeople.get(d.p).add(hid(c,r));
   }
   for (const [pid, ids] of byPeople){
