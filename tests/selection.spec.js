@@ -14,11 +14,12 @@ test("a tap on the fitted map selects that hex without zooming", async ({ app })
   expect(Math.abs((b1 - a1) - (b0 - a0))).toBeLessThan(1);
 });
 
-test("a double tap zooms in there and keeps the hex selected", async ({ app }) => {
+test("a double tap only zooms in there; it doesn't change the selection", async ({ app }) => {
   const [a0] = await app.at(16, 26), [b0] = await app.at(17, 26);
   const [x, y] = await app.at(16, 26);
   await app.page.touchscreen.tap(x, y); await app.page.waitForTimeout(60); await app.page.touchscreen.tap(x, y); await app.settle();
-  expect((await app.state()).selection).toEqual(["h16_26"]);
+  expect((await app.state()).selection).toEqual([]);
+  await expect(app.sheet()).toBeHidden();
   const [a1] = await app.at(16, 26), [b1] = await app.at(17, 26);
   expect(b1 - a1).toBeGreaterThan((b0 - a0) * 1.8);
 });
@@ -138,3 +139,12 @@ test("Done keeps the edits and closes the sheet", async ({ app }) => {
   await expect(app.sheet()).toBeHidden();
   expect((await app.view("h16_26")).t).toBe("forest");
 });
+
+test("a double tap while hexes are selected keeps that selection as it was", async ({ app }) => {
+  await app.zoomIn();
+  await app.tapHex(16, 22);
+  const [x, y] = await app.at(19, 24);
+  await app.page.touchscreen.tap(x, y); await app.page.waitForTimeout(60); await app.page.touchscreen.tap(x, y); await app.settle();
+  expect((await app.state()).selection).toEqual(["h16_22"]);
+});
+

@@ -923,12 +923,15 @@ canvas.addEventListener("wheel", e => {
 
 let lastTap = null;
 function tap(sx, sy){
-  // a second tap in the same spot zooms in there; the first tap already selected the hex
+  // a second tap in the same spot only zooms: put the selection back the way it was before the first tap
   const now = performance.now();
   if (lastTap && now - lastTap.t < 320 && Math.hypot(sx - lastTap.x, sy - lastTap.y) < 30){
-    lastTap = null; zoomAt(2, sx, sy); return;
+    const u = lastTap.undo; lastTap = null;
+    if (u){ selection.clear(); for (const id of u.sel) selection.add(id); adding = u.adding; regrouping = u.regrouping;
+      growStack.length = 0; growStack.push(...u.grow); sheetCat = u.cat; sheetForm = u.form; reveal = null; renderSheet(); }
+    zoomAt(2, sx, sy); return;
   }
-  lastTap = {t: now, x: sx, y: sy};
+  lastTap = {t: now, x: sx, y: sy, undo: moveState ? null : {sel:[...selection], adding, regrouping, grow:[...growStack], cat:sheetCat, form:sheetForm}};
   const h = pick(...toWorld(sx,sy)); if (!h) return;
   if (moveState){ moveMarkerTo(hid(...h)); return; }
   selectHex(hid(...h), false);
