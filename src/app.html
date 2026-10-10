@@ -646,6 +646,35 @@ function groupEdges(ids, s, amt){
     edgeNeighbors(c,r).forEach(([nc,nr], i) => { if (!ids.has(hid(nc,nr))) roughEdge(cx, cy, s, i, amt); });
   }
 }
+// rulers: column numbers along the top and row numbers down the left, fixed to the screen,
+// sliding with the map so they always line up with the hexes under them
+function drawRulers(px){
+  if (px < 12) return;
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+  const sb = stage.getBoundingClientRect(), tops = [$("menuBtn"), document.querySelector(".showbox")].map(e => e.getBoundingClientRect().bottom - sb.top);
+  const top = Math.max(...tops) + 6, th = 18, lw = 26, rowH = px * .866;
+  const surface = css("--surface"), line = css("--line"), fg = css("--fg"), mark = css("--accent");
+  const [sc, sr] = selection.size === 1 ? parse([...selection][0]) : [-1, -1];
+  const cstep = px >= 24 ? 1 : px >= 12 ? 5 : 10, rstep = rowH >= 16 ? 1 : rowH >= 8 ? 5 : 10;
+  ctx.font = `700 10px "Space Mono", monospace`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  // strips
+  ctx.globalAlpha = .92; ctx.fillStyle = surface; ctx.fillRect(0, top, W, th); ctx.fillRect(0, top + th, lw, H - top - th); ctx.globalAlpha = 1;
+  ctx.strokeStyle = line; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(0, top + th); ctx.lineTo(W, top + th); ctx.moveTo(lw, top + th); ctx.lineTo(lw, H); ctx.stroke();
+  // columns, lined up with the even rows (odd rows sit half a hex to the right)
+  for (let c = 0; c < COLS; c++){
+    const x = (SQ3*S*(c + .5))*V.k + V.ox; if (x < lw + 6 || x > W - 6) continue;
+    const on = c === sc; if (!on && (c+1) % cstep && cstep > 1) continue;
+    if (on){ ctx.fillStyle = mark; ctx.fillRect(x - 13, top + 1, 26, th - 2); }
+    ctx.fillStyle = fg; ctx.globalAlpha = on ? 1 : .7; ctx.fillText(String(c+1), x, top + th/2 + .5); ctx.globalAlpha = 1;
+  }
+  for (let r = 0; r < ROWS; r++){
+    const y = (S + 1.5*S*r)*V.k + V.oy; if (y < top + th + 6 || y > H - 6) continue;
+    const on = r === sr; if (!on && (r+1) % rstep && rstep > 1) continue;
+    if (on){ ctx.fillStyle = mark; ctx.fillRect(1, y - 8, lw - 2, 16); }
+    ctx.fillStyle = fg; ctx.globalAlpha = on ? 1 : .7; ctx.fillText(String(r+1), lw/2, y + .5); ctx.globalAlpha = 1;
+  }
+  ctx.fillStyle = surface; ctx.fillRect(0, top, lw, th);   // empty corner
+}
 function paint(){
   raf = 0;
   ctx.setTransform(DPR,0,0,DPR,0,0); ctx.fillStyle = css("--void"); ctx.fillRect(0,0,W,H);
@@ -743,15 +772,12 @@ function paint(){
         ctx.fillStyle = fg; ctx.fillText(t, cx, ty + S*.01); }
     }
   }
-  // coordinates, small at the top of each hex (column, row), as players call them in Discord
-  if (px >= 56){
-    ctx.font = `700 ${Math.max(S*.17, 10*lw)}px "Space Mono", monospace`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
-    for (let r=0;r<ROWS;r++) for (let c=0;c<COLS;c++){
-      const [cx,cy] = center(c,r); if (!vis(cx,cy)) continue;
-      const d = view(hid(c,r)); if (px >= 46 && d && (d.m||[]).some(m => m.label)) continue;   // the marker label sits there
-      const L = d && landInfo(d.t), t = `${c+1},${r+1}`, y = cy - S*.64;
-      ctx.lineWidth = S*.07; ctx.strokeStyle = L ? washOf(L.color) : unmade; ctx.strokeText(t, cx, y);
-      ctx.globalAlpha = .7; ctx.fillStyle = ink; ctx.fillText(t, cx, y); ctx.globalAlpha = 1;
+  // the selected hex keeps its coordinate on the map; every other hex reads it off the rulers
+  if (selection.size === 1 && px >= 40){
+    const [c,r] = parse([...selection][0]), [cx,cy] = center(c,r), d = view(hid(c,r));
+    if (vis(cx,cy) && !(px >= 46 && d && (d.m||[]).some(m => m.label))){
+      ctx.font = `700 ${Math.max(S*.17, 10*lw)}px "Space Mono", monospace`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      const t = `${c+1},${r+1}`, y = cy - S*.64; ctx.lineWidth = Math.max(S*.08, 3*lw); ctx.strokeStyle = surface; ctx.strokeText(t, cx, y); ctx.fillStyle = fg; ctx.fillText(t, cx, y);
     }
   }
   // highlight: dim every hex the chosen player never touched, outline the ones they did
@@ -795,6 +821,7 @@ function paint(){
     const [cx,cy] = center(...focusHex); hexPath(cx,cy,S*.8);
     ctx.setLineDash([S*.25,S*.15]); ctx.strokeStyle = fg; ctx.lineWidth = Math.max(2*lw,S*.1); ctx.stroke(); ctx.setLineDash([]);
   }
+  drawRulers(px);
   updateHint();
 }
 
