@@ -31,14 +31,13 @@ const test = base.extend({
       state: () => page.evaluate(() => window.__soc.state()),
       view: id => page.evaluate(i => window.__soc.view(i), id),
       async zoomIn() {
-        const b = await page.locator("#map").boundingBox();
-        await page.touchscreen.tap(b.x + b.width / 2, b.y + b.height / 2);
-        await page.waitForTimeout(80);
+        await page.evaluate(() => window.__soc.zoomIn());
+        await app.settle();
       },
       // the map shifts when the bottom sheet opens or closes; let that settle before aiming
       settle: () => page.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))),
       async at(c, r) { await app.settle(); return page.evaluate(([c, r]) => window.__hexScreen(c, r), [c, r]); },
-      async tapHex(c, r) { const [x, y] = await app.at(c, r); await page.touchscreen.tap(x, y); await page.waitForTimeout(60); },
+      async tapHex(c, r) { const [x, y] = await app.at(c, r); await page.touchscreen.tap(x, y); await page.waitForTimeout(340); },   // longer than a double tap
       async holdHex(c, r) {
         const [x, y] = await app.at(c, r);
         await page.mouse.move(x, y); await page.mouse.down(); await page.waitForTimeout(650); await page.mouse.up();

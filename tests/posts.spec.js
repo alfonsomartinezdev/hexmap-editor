@@ -111,3 +111,14 @@ test("a view-only player cannot open edit controls", async ({ app }) => {
   await expect(app.row("Land")).toBeDisabled();
   await expect(app.sheet()).toContainText("You can view this map but not change it.");
 });
+
+test("if land arrives after the Land list opened by itself, the sheet goes back to the overview", async ({ app }) => {
+  await app.open({ mock: { userId: "u_me", names: { u_me: "Ash" } } });
+  await app.zoomIn();
+  await app.tapHex(16, 26);
+  await expect(app.heading()).toHaveText("Land");
+  await app.page.evaluate(() => window.__mockStore.put("posts/p0001", { by: "u_other", name: "Rowan", at: 1, changes: { h16_26: { t: "forest" } } }));
+  await expect(app.heading()).toHaveText("Selected");
+  await expect(app.row("Land")).toContainText("Forest");
+});
+

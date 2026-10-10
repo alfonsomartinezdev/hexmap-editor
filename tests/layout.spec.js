@@ -117,3 +117,47 @@ test("the rules open full screen with jumps to each section", async ({ app }) =>
   await app.page.locator("#menuBtn").click();
   expect((await app.page.locator(".mpanel").boundingBox()).height).toBeLessThan(700);
 });
+
+test("light by default, even on a phone set to dark", async ({ app }) => {
+  await app.page.emulateMedia({ colorScheme: "dark" });
+  await app.open();
+  expect(await app.page.evaluate(() => document.documentElement.dataset.mode)).toBe("light");
+  await app.page.locator("#menuBtn").click();
+  await expect(app.page.getByRole("switch", { name: /Dark mode/ })).toHaveAttribute("aria-checked", "false");
+});
+
+test("the dark mode switch is remembered in a cookie", async ({ app }) => {
+  await app.open();
+  const bg = () => app.page.evaluate(() => getComputedStyle(document.body).backgroundColor);
+  const light = await bg();
+  await app.page.locator("#menuBtn").click();
+  const sw = app.page.getByRole("switch", { name: /Dark mode/ });
+  await sw.click();
+  await expect(sw).toHaveAttribute("aria-checked", "true");
+  expect(await bg()).not.toBe(light);
+  expect(await app.page.evaluate(() => document.cookie)).toContain("soc-theme=dark");
+  // the cookie alone brings it back
+  await app.page.evaluate(() => localStorage.removeItem("soc-theme"));
+  await app.page.reload(); await app.page.waitForFunction(() => window.__soc);
+  expect(await app.page.evaluate(() => document.documentElement.dataset.mode)).toBe("dark");
+  await app.page.locator("#menuBtn").click();
+  await app.page.getByRole("switch", { name: /Dark mode/ }).click();
+  expect(await bg()).toBe(light);
+  expect(await app.page.evaluate(() => document.cookie)).toContain("soc-theme=light");
+});
+
+test("the menu never shows stray text for items it leaves out", async ({ app }) => {
+  // regression: an omitted menu item rendered as the word "null"
+  await app.open();
+  await app.page.locator("#menuBtn").click();
+  await expect(app.page.locator("#mBody")).not.toContainText("null");
+});
+
+test("dark mode off stays off even when the surrounding page says dark", async ({ app }) => {
+  // regression: inside the Claude viewer the host marks the page dark, which overrode the player's choice
+  await app.page.emulateMedia({ colorScheme: "dark" });
+  await app.open();
+  await app.page.evaluate(() => document.documentElement.setAttribute("data-theme", "dark"));
+  const bg = await app.page.evaluate(() => getComputedStyle(document.body).backgroundColor);
+  expect(bg).toBe("rgb(236, 235, 229)");
+});

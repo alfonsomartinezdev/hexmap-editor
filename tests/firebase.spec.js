@@ -70,7 +70,7 @@ test("a new land and a new people are shared inside the post", async ({ app }) =
   await app.page.evaluate(() => localStorage.setItem("soc-name", "Ash"));
   await app.tapHex(16, 26);
   await app.button("New land…").click();
-  await app.page.getByRole("button", { name: "Peak", exact: true }).click();
+  await app.page.getByRole("button", { name: "Crosshatch", exact: true }).click();
   await app.page.fill("#landName", "Ice spires");
   await app.footer("Add land").click();
   await app.row("Settled by").click();
@@ -81,7 +81,7 @@ test("a new land and a new people are shared inside the post", async ({ app }) =
   await publish(app);
   await expect.poll(async () => (await writes(app)).length).toBe(1);
   const [w] = await writes(app);
-  expect(Object.values(w.body.types)).toEqual([expect.objectContaining({ kind: "land", name: "Ice spires", glyph: "peak" })]);
+  expect(Object.values(w.body.types)).toEqual([expect.objectContaining({ kind: "land", name: "Ice spires", pen: "cross" })]);
   expect(Object.values(w.body.peoples)).toEqual([expect.objectContaining({ name: "Goblins" })]);
 });
 
@@ -90,6 +90,8 @@ test("another player's new land shows up for everyone", async ({ app }) => {
     types: { abc: { kind: "land", name: "Salt flat", color: "#e3edf3", glyph: "dash" } }, changes: { h18_26: { t: "x-abc" } } }));
   await app.tapHex(20, 26);
   await expect(app.button("Salt flat")).toBeVisible();
+  // made before pens existed: the old symbol picks the nearest pen
+  expect(await app.page.evaluate(() => window.__soc.landInfo("x-abc").pen)).toBe("rows");
 });
 
 test("changing the age publishes a small post that shows in history", async ({ app }) => {
@@ -117,4 +119,20 @@ test("the menu lets a player change their name", async ({ app }) => {
 test("a dropped connection says it is reconnecting", async ({ app }) => {
   await app.page.evaluate(() => window.__fakeFirebase.drop());
   await expect(app.page.locator("#toast")).toHaveText("Reconnecting to the map…");
+});
+
+test("a people's border color can be changed, and the change is published", async ({ app }) => {
+  await app.page.evaluate(() => { localStorage.setItem("soc-name", "Ash"); window.__fakeFirebase.add("p0001", { by: "d_other", name: "Rowan",
+    peoples: { gob: { name: "Goblins", color: "#c8323c" } }, changes: { h16_26: { t: "grassland", p: "gob" } } }); });
+  await app.tapHex(16, 26);
+  await app.row("Settled by").click();
+  await app.page.getByRole("button", { name: "Change Goblins's border color" }).click();
+  await app.page.getByRole("button", { name: "Indigo", exact: true }).click();
+  await app.footer("Save color").click();
+  await app.done();
+  await expect(app.page.locator("#draftBar")).toContainText("1 border color changed");
+  await publish(app);
+  await expect.poll(async () => (await writes(app)).length).toBe(1);
+  const [w] = await writes(app);
+  expect(w.body.peoples).toEqual({ gob: { name: "Goblins", color: "#4b56c8" } });
 });

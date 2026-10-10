@@ -98,10 +98,23 @@ test("a new nature is added and checked", async ({ app }) => {
   await app.setLand(16, 26, "Forest");
   await app.row("Natures").click();
   await app.button("New nature…").click();
+  await app.page.getByRole("button", { name: "Flake", exact: true }).click();
   await app.page.fill("#otherName", "Singing");
   await app.footer("Add").click();
   await expect(app.button("Singing")).toHaveAttribute("aria-pressed", "true");
   expect((await app.view("h16_26")).n).toEqual(["Singing"]);
+  const defs = await app.page.evaluate(() => Object.values(JSON.parse(localStorage.getItem("soc-defs")).types));
+  expect(defs).toEqual([{ kind: "nature", name: "Singing", glyph: "flake" }]);
+});
+
+test("a new land that would look just like another one says so", async ({ app }) => {
+  await app.tapHex(16, 26);
+  await app.button("New land…").click();
+  await app.page.getByRole("button", { name: "Crosshatch", exact: true }).click();
+  await app.page.getByRole("button", { name: "Green", exact: true }).click();
+  await expect(app.page.locator("#sheet .note[role=status]")).toHaveText(/Looks just like Forest/);
+  await app.page.getByRole("button", { name: "Dots", exact: true }).click();
+  await expect(app.page.locator("#sheet .note[role=status]")).toBeHidden();
 });
 
 test("choosing land applies to every selected hex", async ({ app }) => {
@@ -113,29 +126,32 @@ test("choosing land applies to every selected hex", async ({ app }) => {
   for (const id of st.selection) expect((await app.view(id)).t).toBe("desert");
 });
 
-test("a new land takes a symbol, a color and a name, keyboard last", async ({ app }) => {
+test("a new land takes a pen, a color and a name, keyboard last", async ({ app }) => {
   await app.tapHex(16, 26);
   await app.button("New land…").click();
   // the name field must not grab focus (and pop the keyboard) before the player gets to it
   expect(await app.page.evaluate(() => document.activeElement && document.activeElement.id)).not.toBe("landName");
-  await app.page.getByRole("button", { name: "Peak", exact: true }).click();
+  await app.page.getByRole("button", { name: "Crosshatch", exact: true }).click();
   await app.page.getByRole("button", { name: "Snow", exact: true }).click();
   await app.page.fill("#landName", "Ice spires");
   await app.footer("Add land").click();
   await expect.poll(async () => (await app.view("h16_26") || {}).t).toMatch(/^x-/);
   const h = await app.view("h16_26");
   const info = await app.page.evaluate(t => window.__soc.landInfo(t), h.t);
-  expect(info).toMatchObject({ name: "Ice spires", glyph: "peak", color: "#e3edf3" });
+  expect(info).toMatchObject({ name: "Ice spires", pen: "cross", color: "#e3edf3" });
   // reusable on another hex
   await app.done();
   await app.tapHex(20, 26);
   await expect(app.button("Ice spires")).toBeVisible();
 });
 
-test("a new people settles the selected hexes", async ({ app }) => {
+test("a new people settles the selected hexes; the border color comes before the name", async ({ app }) => {
   await app.setLand(16, 26, "Plains");
   await app.row("Settled by").click();
   await app.button("New people…").click();
+  const labels = await app.page.locator("#sheet form .sub, #sheet form label").allTextContents();
+  expect(labels).toEqual(["Border color", "Name"]);
+  expect(await app.page.evaluate(() => document.activeElement && document.activeElement.id)).not.toBe("otherName");
   await app.page.fill("#otherName", "Goblins");
   await app.footer("Add").click();
   await expect(app.row("Settled by")).toContainText("Goblins");
