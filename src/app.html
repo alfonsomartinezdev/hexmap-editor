@@ -1711,7 +1711,7 @@ $("menuBtn").onclick = () => {
 
 /* ================= misc ================= */
 let toastT = 0;
-function toast(m){ const t = $("toast"); t.textContent = m; t.style.opacity = 1; clearTimeout(toastT); toastT = setTimeout(()=>t.style.opacity = 0, 2800); }
+function toast(m, ms){ const t = $("toast"); t.textContent = m; t.style.opacity = 1; clearTimeout(toastT); toastT = setTimeout(()=>t.style.opacity = 0, ms || 2800); }
 function setReadOnly(){ canWrite = false; $("hint").hidden = true; selection.clear(); renderSheet(); renderDraftBar(); }
 
 // read-only hooks for the automated tests (tests/); nothing in the app uses them
@@ -1734,7 +1734,7 @@ let mapId;
 function onMap(id){
   id = id || "";
   if (mapId === id) return;
-  const first = mapId === undefined; mapId = id;
+  const first = mapId === undefined; mapId = id; seenPosts = null;
   const was = lsGet("soc-map");
   lsSet("soc-map", id);
   if (first && (was === null || was === id)) return;            // same map as last time: keep the draft
@@ -1748,8 +1748,25 @@ function onMap(id){
   else if (lost) toast("The map was cleared while you were away. Your unpublished changes were dropped.");
 }
 // every backend does two things: stream all posts, and add one
+// someone else published while you're here: say so, and if you're mid-edit, suggest checking first
+let seenPosts = null;
+function announceNew(list){
+  if (seenPosts === null){ seenPosts = new Set(list.map(p => p.id)); return; }   // first load: nothing is "new"
+  const fresh = list.filter(p => !seenPosts.has(p.id)); for (const p of fresh) seenPosts.add(p.id);
+  const theirs = fresh.filter(p => !isMine(p) && (Object.keys(p.changes || {}).length || (p.world && p.world.age)));
+  if (!theirs.length) return;
+  const who = [...new Set(theirs.map(postName))], name = who.length === 1 ? who[0] : "Other players";
+  const ids = new Set(theirs.flatMap(p => Object.keys(p.changes || {}))), n = ids.size;
+  let msg = n ? `${name} published ${n} ${n===1?"hex":"hexes"}.` : `${name} changed the age.`;
+  if (draft.size){
+    const overlap = [...ids].filter(id => draft.has(id)).length;
+    msg += overlap ? ` ${overlap} of them ${overlap===1?"is":"are"} in your unpublished changes. Check the map before you post.` : " Check the map before you post.";
+  }
+  toast(msg, draft.size ? 6000 : 4000); say(msg);
+}
 function onPosts(list){
   const pc = COLS, pr = ROWS;
+  announceNew(list);
   posts = list.slice().sort(byTime);
   applyDefs(posts); applyDefs([draftDefs]); renderAge();
   if (COLS !== pc || ROWS !== pr) fit();

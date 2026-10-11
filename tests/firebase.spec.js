@@ -197,3 +197,21 @@ test("a database still on the old rules keeps working; clearing explains what's 
   await expect(app.page.locator("#toast")).toContainText("updated database rules");
   expect((await app.view("h16_26")).t).toBe("forest");
 });
+
+test("someone else's new post shows a toast; mid-edit it suggests checking before posting", async ({ app }) => {
+  await app.page.evaluate(() => window.__fakeFirebase.add("p0001", { by: "d_other", name: "Rowan", changes: { h16_26: { t: "forest" } } }));
+  await expect(app.page.locator("#toast")).toHaveText("Rowan published 1 hex.");
+  await app.setLand(18, 26, "Desert"); await app.done();
+  await app.page.evaluate(() => window.__fakeFirebase.add("p0002", { by: "d_other", name: "Rowan", changes: { h18_26: { t: "sea" }, h19_26: { t: "sea" } } }));
+  await expect(app.page.locator("#toast")).toHaveText("Rowan published 2 hexes. 1 of them is in your unpublished changes. Check the map before you post.");
+});
+
+test("posts already there when you open the map, and your own posts, don't announce themselves", async ({ app }) => {
+  await app.page.evaluate(() => localStorage.setItem("soc-name", "Ash"));
+  await app.setLand(16, 26, "Forest"); await app.done();
+  await publish(app);
+  await expect(app.page.locator("#toast")).not.toContainText("published 1 hex");
+  await app.page.reload(); await app.page.waitForFunction(() => window.__soc);
+  await app.page.waitForTimeout(300);
+  await expect(app.page.locator("#toast")).not.toContainText("published");
+});
