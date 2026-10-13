@@ -797,8 +797,11 @@ function paintMap(){
     }
     const path = (dx, dy) => { ctx.beginPath(); for (const [a,b,c2,e] of curves){ ctx.moveTo(a[0]+dx,a[1]+dy); ctx.bezierCurveTo(b[0]+dx,b[1]+dy,c2[0]+dx,c2[1]+dy,e[0]+dx,e[1]+dy); } };
     ctx.lineCap = "round"; ctx.lineJoin = "round";
-    ctx.strokeStyle = isDark() ? "#6fb0e6" : RIVER_BLUE; ctx.lineWidth = Math.max(2*lw, S*.13); path(0,0); ctx.stroke();
-    if (px > 18){ ctx.strokeStyle = isDark() ? "#cfe6f7" : "#1f4f86"; ctx.globalAlpha = .6; ctx.lineWidth = Math.max(lw, S*.03); path(S*.025,-S*.02); ctx.stroke(); ctx.globalAlpha = 1; }
+    // drawn like the coastlines: bold ink banks with the water's own blue between them
+    const waterBlue = (LAND.find(l => l[0]==="sea") || [0,0,"#2f5d86"])[2];
+    ctx.strokeStyle = ink; ctx.lineWidth = Math.max(3.2*lw, S*.32); path(0,0); ctx.stroke();
+    ctx.strokeStyle = mixHex(washOf(waterBlue), waterBlue, .35); ctx.lineWidth = Math.max(1.6*lw, S*.2); path(0,0); ctx.stroke();
+    if (px > 18){ ctx.strokeStyle = mixHex(waterBlue, ink, .3); ctx.globalAlpha = .55; ctx.lineWidth = Math.max(lw*.8, S*.022); path(S*.01,-S*.012); ctx.stroke(); ctx.globalAlpha = 1; }
   }
   // natures in ink along the bottom of the hex; markers as pieces in the middle
   for (const [c,r,cx,cy,d,L] of cells){
