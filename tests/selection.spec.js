@@ -159,3 +159,15 @@ test("the map can't be dragged away off the screen", async ({ app }) => {
   expect(ax).toBeLessThan(390); expect(ay).toBeLessThan(760);
 });
 
+
+test("growing twice in a row doesn't land on the ✕: the + stays put", async ({ app }) => {
+  await app.zoomIn();
+  await app.tapHex(16, 22);
+  const grow = app.page.getByRole("button", { name: /^Grow the selection/ });
+  const before = await grow.boundingBox();
+  await grow.click();
+  const after = await grow.boundingBox();
+  expect(Math.abs(after.x - before.x)).toBeLessThan(1);
+  await grow.click();
+  expect((await app.state()).selection).toHaveLength(19);
+});

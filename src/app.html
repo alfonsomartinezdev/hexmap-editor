@@ -1159,7 +1159,9 @@ function fillSheet(){
       el("button",{type:"button", class:"step", "aria-label":`Grow the selection by ${ringCount()} surrounding hexes`, disabled: !ringCount() || null, onclick:grow}, "+"))
     : count;
   // with several hexes, a quick way to let go of them all and pick again
-  const reset = n > 1 && !sheetForm ? el("button",{type:"button", class:"step deselect", "aria-label":`Deselect all ${n} hexes`, onclick:deselectAll}, "✕") : null;
+  // the ✕ always keeps its place (just invisible for one hex), so the + never moves under your thumb
+  const reset = !sheetForm && sizing ? el("button",{type:"button", class:"step deselect", "aria-label":`Deselect all ${n} hexes`, onclick:deselectAll,
+    style: n > 1 ? null : "visibility:hidden", "aria-hidden": n > 1 ? null : "true", tabindex: n > 1 ? null : "-1"}, "✕") : null;
   sheet.append(el("div",{class:"shead"},
     sheetCat ? el("button",{type:"button", class:"btn quiet", onclick:()=>{ sheetCat=null; sheetForm=null; renderSheet(); }}, "‹ Back") : null,
     el("div",{class:"stitle"}, el("h2",{}, sheetCat || "Selected"),
