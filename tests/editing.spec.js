@@ -42,15 +42,22 @@ test("rows show the current value and open their options", async ({ app }) => {
   await expect(app.heading()).toHaveText("Natures");
 });
 
-test("river is only offered once a hex has land, and runs over it", async ({ app }) => {
+test("River is a switch in the hex panel, once the hex has land", async ({ app }) => {
   await app.tapHex(16, 26);
-  await expect(app.button("Add river")).toHaveCount(0);
-  await app.button("Water").click();
-  await app.row("Land").click();
-  await app.button("Add river").click();
-  const h = await app.view("h16_26");
-  expect(h.t).toBe("sea");
-  expect(h.r).toBe(true);
+  await app.button("Water").click();                   // a fresh hex opens on Land; pick one
+  const river = app.page.getByRole("switch", { name: /^River/ });
+  await expect(river).toHaveAttribute("aria-checked", "false");
+  await river.click();
+  expect((await app.view("h16_26")).r).toBe(true);
+  await expect(river).toHaveAttribute("aria-checked", "true");
+  await river.click();
+  expect((await app.view("h16_26")).r).toBeFalsy();
+});
+
+test("River needs land first", async ({ app }) => {
+  await app.tapHex(16, 26);
+  await app.page.getByRole("button", { name: "‹ Back" }).click();
+  await expect(app.page.getByRole("switch", { name: /^River/ })).toBeDisabled();
 });
 
 test("natures are a checklist: tap to add several, the screen stays open", async ({ app }) => {
