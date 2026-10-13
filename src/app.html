@@ -756,29 +756,49 @@ function paintMap(){
     ctx.beginPath(); for (const id of ids){ const [c,r] = parse(id), [cx,cy] = center(c,r); edgeNeighbors(c,r).forEach(([nc,nr], i) => { if (!all.has(hid(nc,nr))) roughEdge(cx, cy, S*.95, i, .05); }); }
     ctx.lineWidth = Math.max(1.6*lw, S*.1); ctx.stroke();
   }
-  // rivers: one hand-inked blue line from hex to hex, curving through each river hex and running into water
+  // rivers: hand-inked blue lines. River hexes that touch are joined as a tree (no loops or stars),
+  // each group reaches the sea at one point, and lines meet hex edges head-on so joins are smooth.
   {
-    const isWater = nd => nd && (nd.t==="sea" || nd.t==="lake" || (landInfo(nd.t)||{}).pen==="waves");
-    const strokes = [];
-    for (const [c,r,cx,cy,d] of cells){
-      if (!d.r) continue;
-      const pts = [];
-      for (const [nc,nr] of edgeNeighbors(c,r)){
-        if (!inB(nc,nr)) continue; const nd = view(hid(nc,nr)); if (!nd || !(nd.r || isWater(nd))) continue;
-        const [nx,ny] = center(nc,nr), mx = (cx+nx)/2, my = (cy+ny)/2, k = Math.round((cx+nx)*3.7 + (cy+ny)*5.9);   // same nudge from both sides
-        const into = nd.r ? 0 : .35;                                                          // run a little way into the water
-        pts.push([mx + (nx-cx)*into/2 + wob(k)*S*.18, my + (ny-cy)*into/2 + wob(k+1)*S*.18]);
-      }
-      const ccx = cx + wob(cx*1.3+cy)*S*.22, ccy = cy + wob(cy*1.7+cx)*S*.22;
-      if (!pts.length) strokes.push([[cx-S*.55,cy+S*.3],[cx,cy-S*.1],[cx+S*.55,cy-S*.3]]);
-      else if (pts.length === 1) strokes.push([[ccx,ccy],[(ccx+pts[0][0])/2 + wob(cx+cy)*S*.2,(ccy+pts[0][1])/2 + wob(cx-cy)*S*.2],pts[0]]);   // a source: starts in the hex
-      else if (pts.length === 2) strokes.push([pts[0],[ccx,ccy],pts[1]]);
-      else for (const p of pts) strokes.push([[ccx,ccy],[(ccx+p[0])/2,(ccy+p[1])/2],p]);
+    const isWater = d => d && (d.t==="sea" || d.t==="lake" || (landInfo(d.t)||{}).pen==="waves");
+    const rv = new Set();
+    for (let r=0;r<ROWS;r++) for (let c=0;c<COLS;c++){ const d = view(hid(c,r)); if (d && d.r && !isWater(d)) rv.add(hid(c,r)); }
+    const links = new Map(); for (const id of rv) links.set(id, []);
+    const seen = new Set();
+    for (const start of rv){
+      if (seen.has(start)) continue;
+      // the group: find a hex that touches water to start from, so the tree flows from the mouth
+      const group = [], q = [start]; seen.add(start);
+      while (q.length){ const id = q.shift(); group.push(id); const [c,r] = parse(id);
+        for (const [nc,nr] of edgeNeighbors(c,r)){ const n = hid(nc,nr); if (rv.has(n) && !seen.has(n)){ seen.add(n); q.push(n); } } }
+      let mouth = null, sea = null;
+      for (const id of group){ const [c,r] = parse(id); for (const [nc,nr] of edgeNeighbors(c,r)) if (inB(nc,nr) && isWater(view(hid(nc,nr)))){ mouth = id; sea = hid(nc,nr); break; } if (mouth) break; }
+      const root = mouth || group[0], done = new Set([root]), bq = [root];
+      while (bq.length){ const id = bq.shift(), [c,r] = parse(id);
+        for (const [nc,nr] of edgeNeighbors(c,r)){ const n = hid(nc,nr); if (rv.has(n) && !done.has(n)){ done.add(n); bq.push(n); links.get(id).push(n); links.get(n).push(id); } } }
+      if (mouth) links.get(mouth).push(sea);
     }
-    const path = (dx, dy) => { ctx.beginPath(); for (const [a,b,e] of strokes){ ctx.moveTo(a[0]+dx,a[1]+dy); ctx.quadraticCurveTo(b[0]+dx,b[1]+dy,e[0]+dx,e[1]+dy); } };
+    // a point on the edge shared with neighbour n, nudged along the edge (the same from both sides)
+    const edgePt = (cx, cy, nx, ny, into) => {
+      const mx = (cx+nx)/2, my = (cy+ny)/2, dx = nx-cx, dy = ny-cy, L = Math.hypot(dx,dy), k = Math.round((cx+nx)*3.7 + (cy+ny)*5.9);
+      const sgn = (cx < nx || (cx === nx && cy < ny)) ? 1 : -1, sh = wob(k)*S*.28*sgn;     // same point whichever side draws it
+      return { x: mx - dy/L*sh + dx*into, y: my + dx/L*sh + dy*into, tx: dx/L, ty: dy/L };
+    };
+    const curves = [];
+    for (const id of rv){
+      const [c,r] = parse(id), [cx,cy] = center(c,r);
+      if (!vis(cx,cy)) continue;
+      const ends = links.get(id).map(n => { const [nc,nr] = parse(n), [nx,ny] = center(nc,nr), p = edgePt(cx,cy,nx,ny, rv.has(n) ? 0 : .3); return p; });
+      const h = S*.55;
+      const ccx = cx + wob(cx*1.3+cy)*S*.18, ccy = cy + wob(cy*1.7+cx)*S*.18;
+      if (!ends.length){ curves.push([[cx-S*.5,cy+S*.25],[cx-S*.15,cy-S*.3],[cx+S*.15,cy+S*.3],[cx+S*.5,cy-S*.25]]); continue; }
+      if (ends.length === 1){ const e = ends[0]; curves.push([[ccx,ccy],[ccx + e.tx*h*.5, ccy + e.ty*h*.5],[e.x - e.tx*h, e.y - e.ty*h],[e.x,e.y]]); continue; }   // a source
+      if (ends.length === 2){ const [a,b] = ends; curves.push([[a.x,a.y],[a.x - a.tx*h, a.y - a.ty*h],[b.x - b.tx*h, b.y - b.ty*h],[b.x,b.y]]); continue; }
+      for (const e of ends) curves.push([[ccx,ccy],[ccx + e.tx*h*.4, ccy + e.ty*h*.4],[e.x - e.tx*h, e.y - e.ty*h],[e.x,e.y]]);   // a fork
+    }
+    const path = (dx, dy) => { ctx.beginPath(); for (const [a,b,c2,e] of curves){ ctx.moveTo(a[0]+dx,a[1]+dy); ctx.bezierCurveTo(b[0]+dx,b[1]+dy,c2[0]+dx,c2[1]+dy,e[0]+dx,e[1]+dy); } };
     ctx.lineCap = "round"; ctx.lineJoin = "round";
-    ctx.strokeStyle = isDark() ? "#6fb0e6" : RIVER_BLUE; ctx.lineWidth = Math.max(2*lw, S*.2); path(0,0); ctx.stroke();
-    if (px > 18){ ctx.strokeStyle = isDark() ? "#cfe6f7" : "#1f4f86"; ctx.globalAlpha = .7; ctx.lineWidth = Math.max(lw, S*.035); path(S*.03,-S*.02); ctx.stroke(); ctx.globalAlpha = 1; }
+    ctx.strokeStyle = isDark() ? "#6fb0e6" : RIVER_BLUE; ctx.lineWidth = Math.max(2*lw, S*.13); path(0,0); ctx.stroke();
+    if (px > 18){ ctx.strokeStyle = isDark() ? "#cfe6f7" : "#1f4f86"; ctx.globalAlpha = .6; ctx.lineWidth = Math.max(lw, S*.03); path(S*.025,-S*.02); ctx.stroke(); ctx.globalAlpha = 1; }
   }
   // natures in ink along the bottom of the hex; markers as pieces in the middle
   for (const [c,r,cx,cy,d,L] of cells){
