@@ -20,7 +20,7 @@ const highlighted = app => app.page.evaluate(() => window.__soc.highlight());
 test("the picker lists every player with how many hexes they have changed, you first", async ({ app }) => {
   await expect(app.page.locator("#showLabel")).toHaveText("Show: Everyone");
   await app.page.locator("#showBtn").click();
-  const rows = app.page.locator("#mBody .keylist button.link");
+  const rows = app.page.locator("#mBody .keylist.who button.link");
   await expect(rows).toHaveCount(3);
   await expect(rows.nth(0)).toContainText("Everyone");
   await expect(rows.nth(1)).toContainText("Ash (you)");

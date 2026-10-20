@@ -212,6 +212,10 @@ canvas.nat,.rowbtn .rv canvas.nat,.opt canvas.nat{border:0;border-radius:0;backg
 .rules th{background:var(--accent);color:var(--accent-ink);font-family:var(--f-mono);font-size:.8rem}
 .toc{border-bottom:2.5px solid var(--line)}
 .menubtn #ageLabel{display:flex;flex-direction:column;align-items:flex-start;line-height:1;white-space:nowrap}
+#showLabel{display:flex;flex-direction:column;align-items:flex-start;line-height:1.05;min-width:0}
+#showLabel .sh-a{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+#showLabel .age-sep{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+#showLabel .sh-b{font-family:var(--f-mono);font-weight:700;font-size:.66rem;letter-spacing:.04em;text-transform:uppercase;margin-top:2px}
 .menubtn .age-a{font-family:var(--f-display);font-weight:700;font-size:1.3rem}
 .menubtn .age-b{font-family:var(--f-mono);font-weight:700;font-size:.66rem;letter-spacing:.04em;text-transform:uppercase;margin-top:1px}
 .menubtn .age-sep{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
@@ -996,36 +1000,97 @@ let autoLand = false;     // the Land list was opened for us because the hex had
 function needsLand(ids){ return ids.length > 0 && ids.some(id => !(view(id)||{}).t); }
 let adding = false;
 let regrouping = false;
-let highlight = null;     // {key, label, set}: a player's touched hexes, everything else dimmed
+let highlight = null;     // {label, set}: the hexes matching the Show filter, everything else dimmed
+const filt = { who: null, when: null };   // who: a player key; when: "age:turn"; null means everyone / all time
 const playerKey = p => p.name ? "n:" + p.name.trim().toLowerCase() : "b:" + (p.by || "?");
 function players(){
   const m = new Map();
   for (const p of posts){
-    const k = playerKey(p), ids = Object.keys(p.changes || {});
-    if (!m.has(k)) m.set(k, {key:k, label: postName(p), mine: isMine(p), set: new Set()});
-    const e = m.get(k); for (const id of ids) e.set.add(id); if (isMine(p)) { e.mine = true; e.label = postName(p); }
+    const k = playerKey(p);
+    if (!m.has(k)) m.set(k, {key:k, label: postName(p), mine: isMine(p)});
+    if (isMine(p)) { const e = m.get(k); e.mine = true; e.label = postName(p); }
   }
   return [...m.values()].sort((a,b) => (b.mine - a.mine) || a.label.localeCompare(b.label));
 }
-function setHighlight(key){
-  const p = key && players().find(x => x.key === key);
-  highlight = p ? {key, label: p.label, set: p.set} : null;
-  $("showLabel").textContent = highlight ? highlight.label : "Show: Everyone";
-  $("showBtn").setAttribute("aria-label", highlight ? `Highlighting ${highlight.label}. Change` : "Show: Everyone. Highlight a player");
+/* ---- turns: a new turn opens every Monday, Pacific time; numbering starts again with each age ---- */
+const ptFmt = new Intl.DateTimeFormat("en-US", { timeZone: "America/Los_Angeles", year: "numeric", month: "numeric", day: "numeric", weekday: "short" });
+const DOW = {Mon:0, Tue:1, Wed:2, Thu:3, Fri:4, Sat:5, Sun:6};
+function mondayOf(ts){            // the Pacific-time Monday of that week, as a day number
+  const o = {}; for (const {type, value} of ptFmt.formatToParts(new Date(ts))) o[type] = value;
+  return Date.UTC(+o.year, +o.month - 1, +o.day) / 864e5 - DOW[o.weekday];
+}
+function agePeriods(){            // [{age, at}] in order: the map starts in the First Age, then each age change
+  const out = []; let cur = null;
+  for (const p of posts){
+    if (!out.length){ out.push({age: 1, at: p.at || 0}); cur = 1; }
+    const a = p.world && AGES[p.world.age] ? +p.world.age : null;
+    if (a && a !== cur && !p.world.newMap){ out.push({age: a, at: p.at || 0}); cur = a; }
+  }
+  return out.length ? out : [{age: 1, at: Date.now()}];
+}
+function turnAt(ts, periods){
+  let per = periods[0]; for (const q of periods) if ((q.at||0) <= ts) per = q;
+  return { age: per.age, turn: Math.max(1, Math.round((mondayOf(ts) - mondayOf(per.at)) / 7) + 1) };
+}
+const turnKey = t => `${t.age}:${t.turn}`;
+const nowTurn = () => turnAt(Date.now(), agePeriods());
+// every turn so far, newest first, with labels
+function turnList(){
+  const per = agePeriods(), now = nowTurn(), out = [];
+  for (let i = per.length - 1; i >= 0; i--){
+    const end = i === per.length - 1 ? now.turn : turnAt(per[i+1].at - 1, per).turn;
+    for (let t = end; t >= 1; t--){
+      const cur = per[i].age === now.age;
+      const label = cur && t === now.turn ? "This turn" : cur && t === now.turn - 1 ? "Last turn" : cur ? `Turn ${t}` : `${AGES[per[i].age][0]} · Turn ${t}`;
+      out.push({ key: `${per[i].age}:${t}`, label, sub: cur && (t === now.turn || t === now.turn - 1) ? `Turn ${t}` : "" });
+    }
+  }
+  return out;
+}
+function matching(who, when){
+  const per = agePeriods(), set = new Set();
+  for (const p of posts){
+    if (who && playerKey(p) !== who) continue;
+    if (when && turnKey(turnAt(p.at || 0, per)) !== when) continue;
+    for (const id of Object.keys(p.changes || {})) set.add(id);
+  }
+  return set;
+}
+function filterLabel(){
+  const who = filt.who && (players().find(x => x.key === filt.who) || {}).label;
+  const when = filt.when && (turnList().find(x => x.key === filt.when) || {}).label;
+  return [who || (when ? "Everyone" : null), when].filter(Boolean).join(" · ");
+}
+function applyFilter(quiet){
+  highlight = (filt.who || filt.when) ? { label: filterLabel(), set: matching(filt.who, filt.when) } : null;
+  // who on top in marker, the turn typed underneath (like the age label); reads as one phrase
+  const l = $("showLabel"); l.textContent = "";
+  if (!highlight) l.textContent = "Show: Everyone";
+  else {
+    const who = filt.who ? (players().find(x => x.key === filt.who) || {}).label : "Everyone";
+    const when = filt.when ? (turnList().find(x => x.key === filt.when) || {}).label : null;
+    l.append(el("span",{class:"sh-a"}, who || "Someone"));
+    if (when) l.append(el("span",{class:"age-sep"}, " · "), el("span",{class:"sh-b"}, when));
+  }
+  $("showBtn").setAttribute("aria-label", highlight ? `Highlighting ${highlight.label}. Change` : "Show: Everyone. Highlight a player or a turn");
   $("showBtn").classList.toggle("on", !!highlight); $("showOff").hidden = !highlight;
-  say(highlight ? `Highlighting the ${highlight.set.size} hexes ${highlight.label} has changed.` : "Showing everyone.");
+  if (!quiet) say(highlight ? `Highlighting ${highlight.set.size} hexes: ${highlight.label}.` : "Showing everyone.");
   draw();
 }
+function setHighlight(patch){ if (patch === null){ filt.who = null; filt.when = null; } else Object.assign(filt, patch); applyFilter(); }
 async function openShow(){
   await loadNames([...new Set(posts.map(p => p.by))]);
-  const list = el("div",{class:"keylist"});
-  const item = (label, sub, key) => list.append(el("button",{type:"button", class:"link", "aria-current": (highlight ? highlight.key === key : key === null) ? "true" : null, onclick:()=>{ closeModal(); setHighlight(key); }},
+  const count = n => `${n} ${n===1?"hex":"hexes"}`;
+  const row = (list, label, sub, on, patch) => list.append(el("button",{type:"button", class:"link", "aria-current": on ? "true" : null, onclick:()=>{ closeModal(); setHighlight(patch); }},
     el("strong",{}, label), sub ? el("span",{class:"when"}, sub) : null));
-  item("Everyone", "", null);
-  const ps = players();
-  for (const p of ps) item(p.label, `${p.set.size} ${p.set.size===1?"hex":"hexes"}`, p.key);
-  openModal("Highlight a player", [el("p",{class:"note"}, "Shows every hex a player has touched."), list]);
-}   // "deselect all" was tapped: the sheet stays open and taps build a new group   // after a hold or Grow, taps add and remove instead of switching
+  const who = el("div",{class:"keylist who"});
+  row(who, "Everyone", "", filt.who === null, {who: null});
+  for (const p of players()) row(who, p.label, count(matching(p.key, filt.when).size), filt.who === p.key, {who: p.key});
+  const when = el("div",{class:"keylist when"});
+  row(when, "All time", "", filt.when === null, {when: null});
+  for (const t of turnList()) row(when, t.label, [t.sub, count(matching(filt.who, t.key).size)].filter(Boolean).join(" · "), filt.when === t.key, {when: t.key});
+  openModal("Show", [el("p",{class:"sub"}, "Who"), who, el("p",{class:"sub"}, "When"), when]);
+}
 function selectHex(id, add){
   if (add || adding){
     adding = true;
@@ -1692,6 +1757,7 @@ function openRules(){
 }
 $("showBtn").onclick = openShow;
 $("showOff").onclick = () => setHighlight(null);
+setInterval(() => { renderAge(); if (highlight) applyFilter(true); }, 60000);   // a new turn opens on Monday even if nobody posts
 /* light / dark: light unless the player turns dark mode on; the choice lives in a cookie for a year */
 function readThemeCookie(){ try { const m = document.cookie.match(/(?:^|;\s*)soc-theme=(light|dark)/); return m ? m[1] : null; } catch(e){ return null; } }
 function writeThemeCookie(t){ try { document.cookie = `soc-theme=${t}; max-age=31536000; path=/; SameSite=Lax`; } catch(e){} }
@@ -1728,7 +1794,7 @@ function openPeoples(pid){
 function renderAge(){
   // "First Age" in marker, "area 19" typed underneath; reads as one phrase to screen readers
   const l = $("ageLabel"); l.textContent = "";
-  l.append(el("span",{class:"age-a"}, AGES[age][0]), el("span",{class:"age-sep"}, " · "), el("span",{class:"age-b"}, `area ${AGES[age][1]}`));
+  l.append(el("span",{class:"age-a"}, AGES[age][0]), el("span",{class:"age-sep"}, " · "), el("span",{class:"age-b"}, `turn ${nowTurn().turn} · area ${AGES[age][1]}`));
 }
 $("menuBtn").onclick = () => {
   const item = (title, sub, fn) => el("button",{type:"button", class:"link", style:"min-height:60px", onclick:()=>{ closeModal(); fn(); }},
@@ -1809,7 +1875,7 @@ function onPosts(list){
   applyDefs(posts); applyDefs([draftDefs]); renderAge();
   if (COLS !== pc || ROWS !== pr) fit();
   base = fold(posts);
-  if (highlight){ const p = players().find(x => x.key === highlight.key); if (p){ highlight.set = p.set; highlight.label = p.label; } }
+  if (highlight) applyFilter(true);
   // drop draft fields that now match the shared map
   for (const [id,p] of [...draft]){ const b = base.get(id)||{}; for (const k of Object.keys(p)) if (same(b[k], p[k])) delete p[k]; if (!Object.keys(p).length) draft.delete(id); }
   if (histIdx !== null){ if (histIdx >= posts.length) showHistory(null); else histState = fold(posts.slice(0,histIdx+1)); }
