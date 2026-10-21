@@ -1038,7 +1038,9 @@ const nowTurn = () => turnAt(Date.now(), agePeriods());
 function turnList(){
   const per = agePeriods(), now = nowTurn(), out = [];
   for (let i = per.length - 1; i >= 0; i--){
-    const end = i === per.length - 1 ? now.turn : turnAt(per[i+1].at - 1, per).turn;
+    // a finished age ends with its last turn that had posts (the week the next age starts belongs to that age)
+    let end = now.turn;
+    if (i < per.length - 1){ end = 1; for (const p of posts){ if ((p.at||0) >= per[i].at && (p.at||0) < per[i+1].at && Object.keys(p.changes||{}).length) end = Math.max(end, turnAt(p.at, per).turn); } }
     for (let t = end; t >= 1; t--){
       const cur = per[i].age === now.age;
       const label = cur && t === now.turn ? "This turn" : cur && t === now.turn - 1 ? "Last turn" : cur ? `Turn ${t}` : `${AGES[per[i].age][0]} · Turn ${t}`;

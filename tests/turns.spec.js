@@ -58,3 +58,9 @@ test("a new age starts the turns again at 1", async ({ app }) => {
   await app.page.locator("#showBtn").click();
   await expect(app.page.locator("#mBody .keylist.when button.link strong")).toHaveText(["All time", "This turn", "Last turn", "First Age · Turn 2", "First Age · Turn 1"]);
 });
+
+test("a finished age doesn't list an empty extra turn for the week the next age began", async ({ app }) => {
+  await app.page.evaluate(W => window.__mockStore.put("posts/p5", { by: "u_me", at: W + 3600e3, changes: {}, world: { age: 2 } }), W3);
+  await app.page.locator("#showBtn").click();
+  await expect(app.page.locator("#mBody .keylist.when button.link strong")).toHaveText(["All time", "This turn", "First Age · Turn 3", "First Age · Turn 2", "First Age · Turn 1"]);
+});
