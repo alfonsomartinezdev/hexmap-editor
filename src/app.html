@@ -367,6 +367,8 @@ const lsGet = k => { try { return localStorage.getItem(k); } catch(e){ return nu
 const lsSet = (k,v) => { try { localStorage.setItem(k, v); } catch(e){} };
 let deviceId = lsGet("soc-device"); if (!deviceId){ deviceId = "d_" + Math.random().toString(36).slice(2,12); lsSet("soc-device", deviceId); }
 const myName = () => (lsGet("soc-name") || "").trim();
+// TEMPORARY: river style experiments
+const riverStyle = { highlighter: lsGet("soc-river-hl") === "1", windy: lsGet("soc-river-windy") === "1" };
 const names = new Map();        // user id -> display name
 
 const $ = id => document.getElementById(id);
@@ -818,13 +820,40 @@ function paintMap(){
       if (ends.length === 2){ const [a,b] = ends; curves.push([[a.x,a.y],[a.x - a.tx*h, a.y - a.ty*h],[b.x - b.tx*h, b.y - b.ty*h],[b.x,b.y]]); continue; }
       for (const e of ends) curves.push([[ccx,ccy],[ccx + e.tx*h*.4, ccy + e.ty*h*.4],[e.x - e.tx*h, e.y - e.ty*h],[e.x,e.y]]);   // a fork
     }
-    const path = (dx, dy) => { ctx.beginPath(); for (const [a,b,c2,e] of curves){ ctx.moveTo(a[0]+dx,a[1]+dy); ctx.bezierCurveTo(b[0]+dx,b[1]+dy,c2[0]+dx,c2[1]+dy,e[0]+dx,e[1]+dy); } };
+    // windier: sample each curve and push it side to side in meanders that fade out at the hex edges,
+    // so neighbouring hexes still join up
+    const windy = riverStyle.windy, lines = curves.map(([a,b,c2,e]) => {
+      const pts = [], N = windy ? 18 : 10, seed = Math.round((a[0]+e[0])*1.7 + (a[1]+e[1])*2.9), amp = S*(.16 + .08*(wob(seed)+.5))*(wob(seed+1) > 0 ? 1 : -1), waves = .5, ph = 0;
+      for (let i = 0; i <= N; i++){
+        const t = i/N, u = 1-t;
+        let x = u*u*u*a[0] + 3*u*u*t*b[0] + 3*u*t*t*c2[0] + t*t*t*e[0], y = u*u*u*a[1] + 3*u*u*t*b[1] + 3*u*t*t*c2[1] + t*t*t*e[1];
+        if (windy){
+          const dx = 3*u*u*(b[0]-a[0]) + 6*u*t*(c2[0]-b[0]) + 3*t*t*(e[0]-c2[0]), dy = 3*u*u*(b[1]-a[1]) + 6*u*t*(c2[1]-b[1]) + 3*t*t*(e[1]-c2[1]), L = Math.hypot(dx,dy) || 1;
+          const off = amp * Math.sin(Math.PI*t) * Math.sin(2*Math.PI*waves*t + ph);
+          x += -dy/L*off; y += dx/L*off;
+        }
+        pts.push([x,y]);
+      }
+      return pts;
+    });
+    const path = (dx, dy) => { ctx.beginPath(); for (const pts of lines){ ctx.moveTo(pts[0][0]+dx, pts[0][1]+dy);
+      for (let i = 1; i < pts.length - 1; i++){ const mx = (pts[i][0]+pts[i+1][0])/2, my = (pts[i][1]+pts[i+1][1])/2; ctx.quadraticCurveTo(pts[i][0]+dx, pts[i][1]+dy, mx+dx, my+dy); }
+      const z = pts[pts.length-1]; ctx.lineTo(z[0]+dx, z[1]+dy); } };
     ctx.lineCap = "round"; ctx.lineJoin = "round";
-    // drawn like the coastlines: bold ink banks with the water's own blue between them
     const waterBlue = (LAND.find(l => l[0]==="sea") || [0,0,"#2f5d86"])[2];
-    ctx.strokeStyle = ink; ctx.lineWidth = Math.max(3.2*lw, S*.32); path(0,0); ctx.stroke();
-    ctx.strokeStyle = mixHex(washOf(waterBlue), waterBlue, .35); ctx.lineWidth = Math.max(1.6*lw, S*.2); path(0,0); ctx.stroke();
-    if (px > 18){ ctx.strokeStyle = mixHex(waterBlue, ink, .3); ctx.globalAlpha = .55; ctx.lineWidth = Math.max(lw*.8, S*.022); path(S*.01,-S*.012); ctx.stroke(); ctx.globalAlpha = 1; }
+    if (riverStyle.highlighter){
+      // a broad, see-through highlighter swipe: two overlapping passes, darker where they overlap
+      ctx.save(); if (!isDark()) ctx.globalCompositeOperation = "multiply";
+      ctx.strokeStyle = isDark() ? "#5aa0dc" : "#3b8ee6"; ctx.lineCap = "butt";
+      ctx.globalAlpha = .62; ctx.lineWidth = Math.max(3*lw, S*.4); path(0,0); ctx.stroke();
+      ctx.globalAlpha = .28; ctx.lineWidth = Math.max(1.5*lw, S*.14); path(-S*.08,S*.05); ctx.stroke();
+      ctx.restore();
+    } else {
+      // drawn like the coastlines: bold ink banks with the water's own blue between them
+      ctx.strokeStyle = ink; ctx.lineWidth = Math.max(3.2*lw, S*.32); path(0,0); ctx.stroke();
+      ctx.strokeStyle = mixHex(washOf(waterBlue), waterBlue, .35); ctx.lineWidth = Math.max(1.6*lw, S*.2); path(0,0); ctx.stroke();
+      if (px > 18){ ctx.strokeStyle = mixHex(waterBlue, ink, .3); ctx.globalAlpha = .55; ctx.lineWidth = Math.max(lw*.8, S*.022); path(S*.01,-S*.012); ctx.stroke(); ctx.globalAlpha = 1; }
+    }
   }
   // natures in ink along the bottom of the hex; markers as pieces in the middle
   for (const [c,r,cx,cy,d,L] of cells){
@@ -1823,6 +1852,10 @@ const themeToggle = () => switchRow("Dark mode", isDark, on => setTheme(on ? "da
 // rulers are switched off for now; set RULERS_AVAILABLE to bring back the menu switch
 const RULERS_AVAILABLE = false;
 const rulersOn = () => RULERS_AVAILABLE && lsGet("soc-rulers") !== "off";
+// TEMPORARY: river style experiments (riverStyle is defined near the top), switchable from the menu while we compare
+const riverToggles = () => [
+  switchRow("Rivers: highlighter (test)", () => riverStyle.highlighter, on => { riverStyle.highlighter = on; lsSet("soc-river-hl", on ? "1" : "0"); draw(); }),
+  switchRow("Rivers: windier (test)", () => riverStyle.windy, on => { riverStyle.windy = on; lsSet("soc-river-windy", on ? "1" : "0"); draw(); })];
 const rulersToggle = () => switchRow("Rulers", rulersOn, on => { lsSet("soc-rulers", on ? "on" : "off"); draw(); });
 // peoples' border colors, changed from the menu; the change is a draft like any other
 function openPeoples(pid){
@@ -1859,6 +1892,7 @@ $("menuBtn").onclick = () => {
   openModal("Menu", [
     RULERS_AVAILABLE ? rulersToggle() : null,
     themeToggle(),
+    ...riverToggles(),
     item("History", posts.length ? `${posts.length} published ${posts.length===1?"post":"posts"}` : "No posts yet", openHistory),
     window.RULES_MD ? item("Rules", "How to play Songs of Creation", openRules) : null,
     item("Key", "What the colors and symbols mean", openKey),
