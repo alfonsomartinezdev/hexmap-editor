@@ -805,7 +805,7 @@ function paintMap(){
     // a point on the edge shared with neighbour n, nudged along the edge (the same from both sides)
     const edgePt = (cx, cy, nx, ny, into, nudge) => {
       const mx = (cx+nx)/2, my = (cy+ny)/2, dx = nx-cx, dy = ny-cy, L = Math.hypot(dx,dy), k = Math.round((cx+nx)*3.7 + (cy+ny)*5.9);
-      const sgn = (cx < nx || (cx === nx && cy < ny)) ? 1 : -1, sh = wob(k)*S*nudge*sgn;     // same point whichever side draws it
+      const sgn = (cx < nx || (cx === nx && cy < ny)) ? 1 : -1, sh = (Math.abs(ny - cy) < .01 ? 0 : wob(k)*S*nudge*sgn);   // same point whichever side draws it; east-west crossings stay centred so runs are even
       return { x: mx - dy/L*sh + dx*into, y: my + dx/L*sh + dy*into, tx: dx/L, ty: dy/L };
     };
     // with "bends" on, each way through a hex has its own clear shape, so a river reads at a glance:
@@ -832,7 +832,7 @@ function paintMap(){
     // the shapes, as waypoints in (along, across) units of the chord between the two edge points, centred on its middle
     const SHAPES = {
       straight: [],
-      soft: [[0, .16]],                         // a straight run with a gentle sway, so it doesn't look ruled
+      soft: [],                                     // straight across: the same gentle bow a north-south run has, alternating sides
       arc: [[0, .3]],
       S: [[-.2, .24], [.2, -.24]],
       oxbow: [[-.12, .12], [-.3, .36], [-.2, .56], [.2, .56], [.3, .36], [.12, .12]],
@@ -843,8 +843,8 @@ function paintMap(){
       if (Math.hypot(mx + vx - cx, my + vy - cy) > Math.hypot(mx - vx - cx, my - vy - cy)) { vx = -vx; vy = -vy; }   // "across" points into the hex
       vx *= side; vy *= side;
       const sa = L*.85, sx = S*.95, way = SHAPES[shape].map(([al, ac]) => [mx + ux*al*sa + vx*ac*sx, my + uy*al*sa + vy*ac*sx]);
-      const m = L*.9;
-      through([a.x,a.y], [-a.tx*m, -a.ty*m], [b.x,b.y], [b.tx*m, b.ty*m], way);
+      const m = L*.9, tilt = shape === "soft" ? .55 : 0;     // a soft run crosses edges at a slant, like a sine wave, so hex-to-hex it reads as one smooth meander
+      through([a.x,a.y], [(-a.tx + vx*tilt)*m, (-a.ty + vy*tilt)*m], [b.x,b.y], [(b.tx - vx*tilt)*m, (b.ty - vy*tilt)*m], way);
       // keep the bed inside the hex: pull any point that strays past an inner hex back toward the centre
       // (the limit opens up near the ends so the river still reaches the edges)
       const pts = lines[lines.length-1], n = pts.length - 1;
