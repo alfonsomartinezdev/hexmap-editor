@@ -860,12 +860,16 @@ function paintMap(){
         pts.push([u*u*u*a[0]+3*u*u*t*b[0]+3*u*t*t*c2[0]+t*t*t*e[0], u*u*u*a[1]+3*u*u*t*b[1]+3*u*t*t*c2[1]+t*t*t*e[1]]); }
       lines.push(pts);
     };
+    // a river hex the river runs straight through (in one side, out the opposite)
+    const across = id => { if (!rv.has(id)) return false; const ls = links.get(id); if (ls.length !== 2) return false;
+      const [c,r] = parse(id), nb = edgeNeighbors(c,r), e = ls.map(n => { const [nc,nr] = parse(n); return nb.findIndex(([a,b]) => a === nc && b === nr); });
+      return Math.abs(e[0] - e[1]) === 3; };
     for (const id of rv){
       const [c,r] = parse(id), [cx,cy] = center(c,r);
       if (!vis(cx,cy)) continue;
       const nbs = edgeNeighbors(c,r);
       const ends = links.get(id).map(n => { const [nc,nr] = parse(n), [nx,ny] = center(nc,nr), p = edgePt(cx,cy,nx,ny, rv.has(n) ? 0 : .3, bends ? .1 : .28);
-        p.edge = nbs.findIndex(([a,b]) => a === nc && b === nr); return p; });
+        p.edge = nbs.findIndex(([a,b]) => a === nc && b === nr); p.id = n; return p; });
       const h = S*.55;
       const ccx = cx + wob(cx*1.3+cy)*S*.18, ccy = cy + wob(cy*1.7+cx)*S*.18;
       if (!ends.length){ curve([cx-S*.5,cy+S*.25],[cx-S*.15,cy-S*.3],[cx+S*.15,cy+S*.3],[cx+S*.5,cy-S*.25]); continue; }
@@ -880,8 +884,17 @@ function paintMap(){
         else if (shape === "soft"){
           // straight across: the same curve as the north-south pieces (same handles, same depth of bend),
           // just pushed to one side; alternate sides so a long run waves like the north-south rivers
-          const L = Math.hypot(b.x-a.x, b.y-a.y) || 1, d = S*.32*side, nx = -(b.y-a.y)/L*d, ny = (b.x-a.x)/L*d;
-          curve([a.x,a.y],[a.x - a.tx*h + nx, a.y - a.ty*h + ny],[b.x - b.tx*h + nx, b.y - b.ty*h + ny],[b.x,b.y]);
+          // a half wave: it leaves heading toward the bulge side and arrives heading back, so where two hexes meet
+          // (one bowing each way) the slopes match and the river flows straight on as one wave
+          // (next to a turning piece, which meets its edge square on, this end meets square on too)
+          const L = Math.hypot(b.x-a.x, b.y-a.y) || 1, ux = (b.x-a.x)/L, uy = (b.y-a.y)/L, nx = -uy*side, ny = ux*side, k = L*.38;
+          const ta = across(a.id) ? .75 : 0, tb = across(b.id) ? .75 : 0;
+          if (ta || tb) curve([a.x,a.y],[a.x + (ux + nx*ta)*k, a.y + (uy + ny*ta)*k],[b.x - (ux - nx*tb)*k, b.y - (uy - ny*tb)*k],[b.x,b.y]);
+          else {   // square on at both ends (between two turns): a gentle hump in the middle
+            const m = [(a.x+b.x)/2 + nx*S*.16, (a.y+b.y)/2 + ny*S*.16], q = L*.3;
+            curve([a.x,a.y],[a.x + ux*q, a.y + uy*q],[m[0] - ux*q, m[1] - uy*q], m);
+            curve(m,[m[0] + ux*q, m[1] + uy*q],[b.x - ux*q, b.y - uy*q],[b.x,b.y]);
+          }
         }
         else shaped(a, b, shape, side, cx, cy);
         continue;
