@@ -321,7 +321,7 @@ function penFor(def){                                    // a custom land's pen:
   if (def.pen && PEN_ALIAS[def.pen]) return PEN_ALIAS[def.pen];
   if (def.glyph && GLYPH_PEN[def.glyph]) return GLYPH_PEN[def.glyph];
   let h = 0; for (const ch of (def.name||"") + (def.color||"")) h = (h*31 + ch.charCodeAt(0)) >>> 0; return PEN_KEYS[h % PEN_KEYS.length]; }
-const RIVER_BLUE = "#3a7fc4";
+const RIVER_BLUE = "#38b6ff";
 const NATURES = [
   ["Baneful","Something in this land does harm to whatever stays"],["Burning","Something in this land is on fire"],
   ["Carved","Something in this land looks made"],["Deep","This land goes further down than up"],
@@ -367,8 +367,6 @@ const lsGet = k => { try { return localStorage.getItem(k); } catch(e){ return nu
 const lsSet = (k,v) => { try { localStorage.setItem(k, v); } catch(e){} };
 let deviceId = lsGet("soc-device"); if (!deviceId){ deviceId = "d_" + Math.random().toString(36).slice(2,12); lsSet("soc-device", deviceId); }
 const myName = () => (lsGet("soc-name") || "").trim();
-// rivers are drawn as a highlighter stroke; the fixed bends per hex are kept but switched off for now
-const riverStyle = { highlighter: true, bends: false };
 const names = new Map();        // user id -> display name
 
 const $ = id => document.getElementById(id);
@@ -781,8 +779,8 @@ function paintMap(){
     ctx.beginPath(); for (const id of ids){ const [c,r] = parse(id), [cx,cy] = center(c,r); edgeNeighbors(c,r).forEach(([nc,nr], i) => { if (!all.has(hid(nc,nr))) roughEdge(cx, cy, S*.95, i, .05); }); }
     ctx.lineWidth = Math.max(1.6*lw, S*.1); ctx.stroke();
   }
-  // rivers: hand-inked blue lines. River hexes that touch are joined as a tree (no loops or stars),
-  // each group reaches the sea at one point, and lines meet hex edges head-on so joins are smooth.
+  // rivers: a see-through highlighter stroke, one piece per hex. River hexes that touch are joined as a tree
+  // (no loops), each river reaches water at one point, and every piece meets its hex edge at the middle.
   {
     const isWater = d => d && (d.t==="sea" || d.t==="lake" || (landInfo(d.t)||{}).pen==="waves");
     const rv = new Set();
@@ -791,10 +789,10 @@ function paintMap(){
     const seen = new Set();
     for (const start of rv){
       if (seen.has(start)) continue;
-      // the group: find a hex that touches water to start from, so the tree flows from the mouth
       const group = [], q = [start]; seen.add(start);
       while (q.length){ const id = q.shift(); group.push(id); const [c,r] = parse(id);
         for (const [nc,nr] of edgeNeighbors(c,r)){ const n = hid(nc,nr); if (rv.has(n) && !seen.has(n)){ seen.add(n); q.push(n); } } }
+      // grow the tree from the hex that touches water, so it flows out at one mouth
       let mouth = null, sea = null;
       for (const id of group){ const [c,r] = parse(id); for (const [nc,nr] of edgeNeighbors(c,r)) if (inB(nc,nr) && isWater(view(hid(nc,nr)))){ mouth = id; sea = hid(nc,nr); break; } if (mouth) break; }
       const root = mouth || group[0], done = new Set([root]), bq = [root];
@@ -802,126 +800,49 @@ function paintMap(){
         for (const [nc,nr] of edgeNeighbors(c,r)){ const n = hid(nc,nr); if (rv.has(n) && !done.has(n)){ done.add(n); bq.push(n); links.get(id).push(n); links.get(n).push(id); } } }
       if (mouth) links.get(mouth).push(sea);
     }
-    // the middle of the edge shared with neighbour n
-    const edgePt = (cx, cy, nx, ny, into, nudge) => {
-      const mx = (cx+nx)/2, my = (cy+ny)/2, dx = nx-cx, dy = ny-cy, L = Math.hypot(dx,dy), k = Math.round((cx+nx)*3.7 + (cy+ny)*5.9);
-      const sh = 0;     // every river tile meets the edge at its middle, so tiles always line up
-      return { x: mx - dy/L*sh + dx*into, y: my + dx/L*sh + dy*into, tx: dx/L, ty: dy/L };
-    };
-    // with "bends" on, each way through a hex has its own clear shape, so a river reads at a glance:
-    // straight runs, gentle arcs, S-bends and oxbow loops, always the same for the same pair of edges
-    // straight across: a straight run, an S-bend or an oxbow; a wide turn: an arc, an S or an oxbow; a sharp turn: just the turn
-    // touching hexes always get different shapes (a 3-colouring of the hex grid), so a long run never repeats the same bend
-    const POOL = { across: ["straight","S","oxbow"], wide: ["arc","S","oxbow"] };
-    const hexColour = (c, r) => { const q = c - (r - (r&1))/2; return (((q - r) % 3) + 3) % 3; };
-    const bends = riverStyle.bends;
+    const edgeOf = (id, n) => { const [c,r] = parse(id), [nc,nr] = parse(n); return edgeNeighbors(c,r).findIndex(([a,b]) => a === nc && b === nr); };
+    // the river runs straight through this hex (in one side, out the opposite)
+    const across = id => { const ls = rv.has(id) ? links.get(id) : []; return ls.length === 2 && Math.abs(edgeOf(id, ls[0]) - edgeOf(id, ls[1])) === 3; };
     const lines = [];
-    // a smooth line from edge to edge through waypoints: Hermite curves, leaving and arriving square to the hex edges
-    const through = (A, tA, B, tB, way) => {
-      const P = [A, ...way, B], T = P.map((p, i) => i === 0 ? tA : i === P.length-1 ? tB : [(P[i+1][0]-P[i-1][0])/2, (P[i+1][1]-P[i-1][1])/2]);
-      const pts = [];
-      for (let i = 0; i < P.length-1; i++){
-        const p0 = P[i], p1 = P[i+1], m0 = T[i], m1 = T[i+1], n = 10;
-        for (let k = (i ? 1 : 0); k <= n; k++){
-          const t = k/n, t2 = t*t, t3 = t2*t, h00 = 2*t3-3*t2+1, h10 = t3-2*t2+t, h01 = -2*t3+3*t2, h11 = t3-t2;
-          pts.push([h00*p0[0]+h10*m0[0]+h01*p1[0]+h11*m1[0], h00*p0[1]+h10*m0[1]+h01*p1[1]+h11*m1[1]]);
-        }
-      }
-      lines.push(pts);
-    };
-    // the shapes, as waypoints in (along, across) units of the chord between the two edge points, centred on its middle
-    const SHAPES = {
-      straight: [],
-      soft: [[0, .2]],                                     // straight across: the same gentle bow a north-south run has, alternating sides
-      arc: [[0, .3]],
-      S: [[-.2, .24], [.2, -.24]],
-      oxbow: [[-.12, .12], [-.3, .36], [-.2, .56], [.2, .56], [.3, .36], [.12, .12]],
-    };
-    const shaped = (a, b, shape, side, cx, cy) => {
-      const L = Math.hypot(b.x-a.x, b.y-a.y) || 1, ux = (b.x-a.x)/L, uy = (b.y-a.y)/L, mx = (a.x+b.x)/2, my = (a.y+b.y)/2;
-      let vx = -uy, vy = ux;
-      if (Math.hypot(mx + vx - cx, my + vy - cy) > Math.hypot(mx - vx - cx, my - vy - cy)) { vx = -vx; vy = -vy; }   // "across" points into the hex
-      vx *= side; vy *= side;
-      const sa = L*.85, sx = S*.95, way = SHAPES[shape].map(([al, ac]) => [mx + ux*al*sa + vx*ac*sx, my + uy*al*sa + vy*ac*sx]);
-      const m = L*.9, tilt = 0;     // a soft run crosses edges at a slant, like a sine wave, so hex-to-hex it reads as one smooth meander
-      through([a.x,a.y], [(-a.tx + vx*tilt)*m, (-a.ty + vy*tilt)*m], [b.x,b.y], [(b.tx - vx*tilt)*m, (b.ty - vy*tilt)*m], way);
-      // keep the bed inside the hex: pull any point that strays past an inner hex back toward the centre
-      // (the limit opens up near the ends so the river still reaches the edges)
-      const pts = lines[lines.length-1], n = pts.length - 1;
-      for (let i = 1; i < n; i++){
-        const t = i/n, near = Math.max(0, 1 - Math.min(t, 1-t)*5), lim = S*(.7 + .17*near);
-        const dx = pts[i][0]-cx, dy = pts[i][1]-cy;
-        let d = 0; for (let k = 0; k < 3; k++){ const a2 = Math.PI/3*k; d = Math.max(d, Math.abs(dx*Math.cos(a2) + dy*Math.sin(a2))); }
-        if (d > lim){ const f = lim/d; pts[i] = [cx + dx*f, cy + dy*f]; }
-      }
-    };
-    const curve = (a, b, c2, e) => {           // a plain cubic, for sources and forks
-      const pts = []; for (let i = 0; i <= 12; i++){ const t = i/12, u = 1-t;
-        pts.push([u*u*u*a[0]+3*u*u*t*b[0]+3*u*t*t*c2[0]+t*t*t*e[0], u*u*u*a[1]+3*u*u*t*b[1]+3*u*t*t*c2[1]+t*t*t*e[1]]); }
-      lines.push(pts);
-    };
-    // a river hex the river runs straight through (in one side, out the opposite)
-    const across = id => { if (!rv.has(id)) return false; const ls = links.get(id); if (ls.length !== 2) return false;
-      const [c,r] = parse(id), nb = edgeNeighbors(c,r), e = ls.map(n => { const [nc,nr] = parse(n); return nb.findIndex(([a,b]) => a === nc && b === nr); });
-      return Math.abs(e[0] - e[1]) === 3; };
+    const curve = (a, b, c2, e) => { const pts = []; for (let i = 0; i <= 12; i++){ const t = i/12, u = 1-t;
+      pts.push([u*u*u*a[0]+3*u*u*t*b[0]+3*u*t*t*c2[0]+t*t*t*e[0], u*u*u*a[1]+3*u*u*t*b[1]+3*u*t*t*c2[1]+t*t*t*e[1]]); } lines.push(pts); };
+    const h = S*.55;
     for (const id of rv){
       const [c,r] = parse(id), [cx,cy] = center(c,r);
       if (!vis(cx,cy)) continue;
-      const nbs = edgeNeighbors(c,r);
-      const ends = links.get(id).map(n => { const [nc,nr] = parse(n), [nx,ny] = center(nc,nr), p = edgePt(cx,cy,nx,ny, rv.has(n) ? 0 : .3, bends ? .1 : .28);
-        p.edge = nbs.findIndex(([a,b]) => a === nc && b === nr); p.id = n; return p; });
-      const h = S*.55;
+      // where the river leaves this hex: the middle of each edge it crosses (a little way into water); t points out
+      const ends = links.get(id).map(n => { const [nx,ny] = center(...parse(n)), dx = nx-cx, dy = ny-cy, L = Math.hypot(dx,dy), into = rv.has(n) ? 0 : .3;
+        return { x: (cx+nx)/2 + dx*into, y: (cy+ny)/2 + dy*into, tx: dx/L, ty: dy/L, edge: edgeOf(id, n), id: n }; });
       const ccx = cx + wob(cx*1.3+cy)*S*.18, ccy = cy + wob(cy*1.7+cx)*S*.18;
-      if (!ends.length){ curve([cx-S*.5,cy+S*.25],[cx-S*.15,cy-S*.3],[cx+S*.15,cy+S*.3],[cx+S*.5,cy-S*.25]); continue; }
+      if (!ends.length){ curve([cx-S*.5,cy+S*.25],[cx-S*.15,cy-S*.3],[cx+S*.15,cy+S*.3],[cx+S*.5,cy-S*.25]); continue; }   // a lone river hex
       if (ends.length === 1){ const e = ends[0]; curve([ccx,ccy],[ccx + e.tx*h*.5, ccy + e.ty*h*.5],[e.x - e.tx*h, e.y - e.ty*h],[e.x,e.y]); continue; }   // a source
-      if (ends.length === 2){
-        let [a,b] = ends; if (a.edge > b.edge) [a,b] = [b,a];          // draw in edge order so the shape is the same from either direction
-        const gap = Math.min(Math.abs(a.edge - b.edge), 6 - Math.abs(a.edge - b.edge)), opposite = gap === 3;
-        const shape = !bends ? (opposite ? "soft" : "straight") : gap === 1 ? "straight" : POOL[opposite ? "across" : "wide"][hexColour(c, r)];
-        // straight across, a bend can go either way; on a turn it has to bulge into the hex
-        const side = opposite ? (bends ? (wob(c*13.1 + r*7.7) > 0 ? 1 : -1) : ((a.edge % 3 === 0 ? c : r) % 2 ? 1 : -1)) : 1;
-        if (shape === "straight") curve([a.x,a.y],[a.x - a.tx*h, a.y - a.ty*h],[b.x - b.tx*h, b.y - b.ty*h],[b.x,b.y]);
-        else if (shape === "soft"){
-          // straight across: the same curve as the north-south pieces (same handles, same depth of bend),
-          // just pushed to one side; alternate sides so a long run waves like the north-south rivers
-          // a half wave: it leaves heading toward the bulge side and arrives heading back, so where two hexes meet
-          // (one bowing each way) the slopes match and the river flows straight on as one wave
-          // (next to a turning piece, which meets its edge square on, this end meets square on too)
-          const L = Math.hypot(b.x-a.x, b.y-a.y) || 1, ux = (b.x-a.x)/L, uy = (b.y-a.y)/L, nx = -uy*side, ny = ux*side, k = L*.38;
-          const ta = across(a.id) ? .75 : 0, tb = across(b.id) ? .75 : 0;
-          if (ta || tb) curve([a.x,a.y],[a.x + (ux + nx*ta)*k, a.y + (uy + ny*ta)*k],[b.x - (ux - nx*tb)*k, b.y - (uy - ny*tb)*k],[b.x,b.y]);
-          else {   // square on at both ends (between two turns): a gentle hump in the middle
-            const m = [(a.x+b.x)/2 + nx*S*.16, (a.y+b.y)/2 + ny*S*.16], q = L*.3;
-            curve([a.x,a.y],[a.x + ux*q, a.y + uy*q],[m[0] - ux*q, m[1] - uy*q], m);
-            curve(m,[m[0] + ux*q, m[1] + uy*q],[b.x - ux*q, b.y - uy*q],[b.x,b.y]);
-          }
-        }
-        else shaped(a, b, shape, side, cx, cy);
-        continue;
+      if (ends.length > 2){ for (const e of ends) curve([ccx,ccy],[ccx + e.tx*h*.4, ccy + e.ty*h*.4],[e.x - e.tx*h, e.y - e.ty*h],[e.x,e.y]); continue; }   // a fork
+      let [a,b] = ends; if (a.edge > b.edge) [a,b] = [b,a];       // edge order, so the piece is the same whichever way it's drawn
+      if (Math.abs(a.edge - b.edge) !== 3){ curve([a.x,a.y],[a.x - a.tx*h, a.y - a.ty*h],[b.x - b.tx*h, b.y - b.ty*h],[b.x,b.y]); continue; }   // a turn
+      // straight through: half a wave, bowing to alternate sides hex by hex. Next to another straight-through hex
+      // the ends slant so the slopes match; next to a turn they meet the edge square on, like the turn does.
+      const side = (a.edge % 3 === 0 ? c : r) % 2 ? 1 : -1;
+      const L = Math.hypot(b.x-a.x, b.y-a.y) || 1, ux = (b.x-a.x)/L, uy = (b.y-a.y)/L, nx = -uy*side, ny = ux*side, k = L*.38;
+      const ta = across(a.id) ? .75 : 0, tb = across(b.id) ? .75 : 0;
+      if (ta || tb) curve([a.x,a.y],[a.x + (ux + nx*ta)*k, a.y + (uy + ny*ta)*k],[b.x - (ux - nx*tb)*k, b.y - (uy - ny*tb)*k],[b.x,b.y]);
+      else {     // square on at both ends: a gentle hump in the middle
+        const m = [(a.x+b.x)/2 + nx*S*.16, (a.y+b.y)/2 + ny*S*.16], q = L*.3;
+        curve([a.x,a.y],[a.x + ux*q, a.y + uy*q],[m[0] - ux*q, m[1] - uy*q], m);
+        curve(m,[m[0] + ux*q, m[1] + uy*q],[b.x - ux*q, b.y - uy*q],[b.x,b.y]);
       }
-      for (const e of ends) curve([ccx,ccy],[ccx + e.tx*h*.4, ccy + e.ty*h*.4],[e.x - e.tx*h, e.y - e.ty*h],[e.x,e.y]);   // a fork
     }
-    const path = (dx, dy, C) => { C = C || ctx; C.beginPath(); for (const pts of lines){ C.moveTo(pts[0][0]+dx, pts[0][1]+dy);
-      for (let i = 1; i < pts.length - 1; i++){ const mx = (pts[i][0]+pts[i+1][0])/2, my = (pts[i][1]+pts[i+1][1])/2; C.quadraticCurveTo(pts[i][0]+dx, pts[i][1]+dy, mx+dx, my+dy); }
-      const z = pts[pts.length-1]; C.lineTo(z[0]+dx, z[1]+dy); } };
-    ctx.lineCap = "round"; ctx.lineJoin = "round";
-    const waterBlue = (LAND.find(l => l[0]==="sea") || [0,0,"#2f5d86"])[2];
-    if (riverStyle.highlighter && lines.length){
-      // a highlighter swipe: drawn on its own layer (so it doesn't darken where it crosses itself), then laid over the map
-      const L = paintMap.layer || (paintMap.layer = document.createElement("canvas"));
-      if (L.width !== canvas.width || L.height !== canvas.height){ L.width = canvas.width; L.height = canvas.height; }
-      const C = L.getContext("2d"); C.setTransform(1,0,0,1,0,0); C.clearRect(0,0,L.width,L.height); C.setTransform(ctx.getTransform());
-      // one flat, bright stroke with square chisel ends, laid on see-through so the hatching shows through
-      const w = Math.max(3*lw, S*.28);
-      C.lineCap = "round"; C.lineJoin = "round"; C.strokeStyle = isDark() ? "#5fd0ff" : "#38b6ff";
-      C.globalAlpha = 1; C.lineWidth = w; path(0,0,C); C.stroke();
+    if (lines.length){
+      // drawn on its own layer first, so the stroke doesn't darken where branches overlap, then laid over the map
+      const Lc = paintMap.layer || (paintMap.layer = document.createElement("canvas"));
+      if (Lc.width !== canvas.width || Lc.height !== canvas.height){ Lc.width = canvas.width; Lc.height = canvas.height; }
+      const C = Lc.getContext("2d"); C.setTransform(1,0,0,1,0,0); C.clearRect(0,0,Lc.width,Lc.height); C.setTransform(ctx.getTransform());
+      C.beginPath();
+      for (const pts of lines){ C.moveTo(...pts[0]);
+        for (let i = 1; i < pts.length - 1; i++) C.quadraticCurveTo(pts[i][0], pts[i][1], (pts[i][0]+pts[i+1][0])/2, (pts[i][1]+pts[i+1][1])/2);
+        C.lineTo(...pts[pts.length-1]); }
+      C.lineCap = "round"; C.lineJoin = "round"; C.strokeStyle = isDark() ? "#5fd0ff" : "#38b6ff"; C.lineWidth = Math.max(3*lw, S*.28); C.stroke();
       ctx.save(); ctx.setTransform(1,0,0,1,0,0); ctx.globalAlpha = isDark() ? .6 : .7; ctx.globalCompositeOperation = isDark() ? "screen" : "multiply";
-      ctx.drawImage(L, 0, 0); ctx.restore();
-    } else {
-      // drawn like the coastlines: bold ink banks with the water's own blue between them
-      ctx.strokeStyle = ink; ctx.lineWidth = Math.max(3.2*lw, S*.32); path(0,0); ctx.stroke();
-      ctx.strokeStyle = mixHex(washOf(waterBlue), waterBlue, .35); ctx.lineWidth = Math.max(1.6*lw, S*.2); path(0,0); ctx.stroke();
-      if (px > 18){ ctx.strokeStyle = mixHex(waterBlue, ink, .3); ctx.globalAlpha = .55; ctx.lineWidth = Math.max(lw*.8, S*.022); path(S*.01,-S*.012); ctx.stroke(); ctx.globalAlpha = 1; }
+      ctx.drawImage(Lc, 0, 0); ctx.restore();
     }
   }
   // natures in ink along the bottom of the hex; markers as pieces in the middle
