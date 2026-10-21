@@ -1098,21 +1098,7 @@ function applyFilter(quiet){
   if (!quiet) say(highlight ? `Highlighting ${highlight.set.size} hexes: ${highlight.label}.` : "Showing everyone.");
   draw();
 }
-function setHighlight(patch){ if (patch === null){ filt.who = null; filt.when = null; } else Object.assign(filt, patch); applyFilter(); bringIntoView(); }
-// if none of the highlighted hexes are in sight (above any open panel), slide the map to them
-function bringIntoView(){
-  if (!highlight || !highlight.set.size) return;
-  const panel = !modal.hidden ? modal.querySelector(".mpanel") : (!sheet.hidden ? sheet : null);
-  const sb = stage.getBoundingClientRect(), bottom = panel ? Math.min(H, panel.getBoundingClientRect().top - sb.top) : H, top = 110;
-  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity, seen = false;
-  for (const id of highlight.set){
-    const [c,r] = parse(id); if (!inB(c,r)) continue; const [cx,cy] = center(c,r), sx = cx*V.k + V.ox, sy = cy*V.k + V.oy;
-    if (sx > 0 && sx < W && sy > top && sy < bottom) seen = true;
-    x0 = Math.min(x0, cx); x1 = Math.max(x1, cx); y0 = Math.min(y0, cy); y1 = Math.max(y1, cy);
-  }
-  if (seen || x0 === Infinity) return;
-  V.ox = W/2 - (x0+x1)/2*V.k; V.oy = (top + bottom)/2 - (y0+y1)/2*V.k; draw();
-}
+function setHighlight(patch){ if (patch === null){ filt.who = null; filt.when = null; } else Object.assign(filt, patch); applyFilter(); }
 // Show: who as chips, when as a stepper through the turns. The panel stays open and the map
 // updates behind it, so picking a player and a turn is one visit.
 let showTurn = null;      // the turn the stepper is on, even while "All time" is picked
