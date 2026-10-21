@@ -802,10 +802,10 @@ function paintMap(){
         for (const [nc,nr] of edgeNeighbors(c,r)){ const n = hid(nc,nr); if (rv.has(n) && !done.has(n)){ done.add(n); bq.push(n); links.get(id).push(n); links.get(n).push(id); } } }
       if (mouth) links.get(mouth).push(sea);
     }
-    // a point on the edge shared with neighbour n, nudged along the edge (the same from both sides)
+    // the middle of the edge shared with neighbour n
     const edgePt = (cx, cy, nx, ny, into, nudge) => {
       const mx = (cx+nx)/2, my = (cy+ny)/2, dx = nx-cx, dy = ny-cy, L = Math.hypot(dx,dy), k = Math.round((cx+nx)*3.7 + (cy+ny)*5.9);
-      const sgn = (cx < nx || (cx === nx && cy < ny)) ? 1 : -1, sh = (Math.abs(ny - cy) < .01 ? 0 : wob(k)*S*nudge*sgn);   // same point whichever side draws it; east-west crossings stay centred so runs are even
+      const sh = 0;     // every river tile meets the edge at its middle, so tiles always line up
       return { x: mx - dy/L*sh + dx*into, y: my + dx/L*sh + dy*into, tx: dx/L, ty: dy/L };
     };
     // with "bends" on, each way through a hex has its own clear shape, so a river reads at a glance:
