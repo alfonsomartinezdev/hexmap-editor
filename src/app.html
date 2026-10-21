@@ -832,7 +832,7 @@ function paintMap(){
     // the shapes, as waypoints in (along, across) units of the chord between the two edge points, centred on its middle
     const SHAPES = {
       straight: [],
-      soft: [],                                     // straight across: the same gentle bow a north-south run has, alternating sides
+      soft: [[0, .2]],                                     // straight across: the same gentle bow a north-south run has, alternating sides
       arc: [[0, .3]],
       S: [[-.2, .24], [.2, -.24]],
       oxbow: [[-.12, .12], [-.3, .36], [-.2, .56], [.2, .56], [.3, .36], [.12, .12]],
