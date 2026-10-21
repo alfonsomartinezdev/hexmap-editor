@@ -96,7 +96,7 @@ test.describe("publishing", () => {
     await app.page.locator("#menuBtn").click();
     await app.page.locator("#mBody button.link", { hasText: /^Age/ }).click();
     await app.page.getByRole("button", { name: "Second Age" }).click();
-    await expect(app.page.locator("#ageLabel")).toHaveText(/^Second Age · turn \d+ · area 7$/);
+    await expect(app.page.locator("#ageLabel")).toHaveText("Second Age · area 7");
     // the age travels as a small post, so history shows when the world moved on
     await expect.poll(() => app.page.evaluate(() => Object.entries(window.__mockStore.all()).filter(([k]) => k.startsWith("posts/")).map(([, v]) => v.world))).toEqual([expect.objectContaining({ age: 2 })]);
   });

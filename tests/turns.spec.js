@@ -24,10 +24,6 @@ const turnLabel = app => app.page.locator("#mBody .turnlabel strong");
 const earlier = app => app.page.getByRole("button", { name: "Earlier turn" }).click();
 const highlighted = app => app.page.evaluate(() => (window.__soc.highlight() || []).sort());
 
-test("the age label shows the current turn", async ({ app }) => {
-  await expect(app.page.locator("#ageLabel")).toHaveText("First Age · turn 3 · area 19");
-});
-
 test("the turn stepper starts on this turn and steps back through older turns", async ({ app }) => {
   await open(app);
   await expect(turnLabel(app)).toHaveText("This turn");
@@ -61,7 +57,7 @@ test("who and when combine in one visit, and All time turns the turn off", async
 
 test("a new age starts the turns again at 1, and the stepper crosses into the old age", async ({ app }) => {
   await app.page.evaluate(W => window.__mockStore.put("posts/p5", { by: "u_me", at: W + 3600e3, changes: {}, world: { age: 2 } }), W2);
-  await expect(app.page.locator("#ageLabel")).toHaveText("Second Age · turn 2 · area 7");
+  await expect(app.page.locator("#ageLabel")).toHaveText("Second Age · area 7");
   await open(app);
   await earlier(app); await expect(turnLabel(app)).toHaveText("Last turn");
   await earlier(app); await expect(turnLabel(app)).toHaveText("First Age · Turn 2");

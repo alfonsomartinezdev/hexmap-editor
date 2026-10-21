@@ -100,7 +100,7 @@ test("changing the age publishes a small post that shows in history", async ({ a
   await app.page.locator("#mBody button.link", { hasText: /^Age/ }).click();
   await app.page.getByRole("button", { name: "Second Age" }).click();
   await expect.poll(async () => (await writes(app)).map(w => w.body.world)).toEqual([expect.objectContaining({ age: 2 })]);
-  await expect(app.page.locator("#ageLabel")).toHaveText(/^Second Age · turn \d+ · area 7$/);
+  await expect(app.page.locator("#ageLabel")).toHaveText("Second Age · area 7");
   await app.page.locator("#menuBtn").click();
   await app.page.locator("#mBody button.link", { hasText: "History" }).click();
   await expect(app.page.locator("#mBody .keylist button.link").first()).toContainText("Ash (you)");

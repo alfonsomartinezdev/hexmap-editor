@@ -13,7 +13,7 @@ test("opens with the whole map fitted, in portrait, with no title bar", async ({
   const box = await app.page.locator("#map").boundingBox();
   for (const [x, y] of [first, last]) { expect(x).toBeGreaterThanOrEqual(box.x); expect(x).toBeLessThanOrEqual(box.x + box.width); expect(y).toBeGreaterThanOrEqual(box.y); expect(y).toBeLessThanOrEqual(box.y + box.height); }
   await expect(app.page.locator("h1")).toHaveCount(0);
-  await expect(app.page.locator("#ageLabel")).toHaveText("First Age · turn 1 · area 19");
+  await expect(app.page.locator("#ageLabel")).toHaveText("First Age · area 19");
 });
 
 test("nothing is cut off at phone width", async ({ app }) => {

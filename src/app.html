@@ -1819,7 +1819,7 @@ function openRules(){
 }
 $("showBtn").onclick = openShow;
 $("showOff").onclick = () => setHighlight(null);
-setInterval(() => { renderAge(); if (highlight) applyFilter(true); }, 60000);   // a new turn opens on Monday even if nobody posts
+setInterval(() => { if (highlight) applyFilter(true); }, 60000);   // a new turn opens on Monday even if nobody posts
 /* light / dark: light unless the player turns dark mode on; the choice lives in a cookie for a year */
 function readThemeCookie(){ try { const m = document.cookie.match(/(?:^|;\s*)soc-theme=(light|dark)/); return m ? m[1] : null; } catch(e){ return null; } }
 function writeThemeCookie(t){ try { document.cookie = `soc-theme=${t}; max-age=31536000; path=/; SameSite=Lax`; } catch(e){} }
@@ -1856,7 +1856,7 @@ function openPeoples(pid){
 function renderAge(){
   // "First Age" in marker, "area 19" typed underneath; reads as one phrase to screen readers
   const l = $("ageLabel"); l.textContent = "";
-  l.append(el("span",{class:"age-a"}, AGES[age][0]), el("span",{class:"age-sep"}, " · "), el("span",{class:"age-b"}, `turn ${nowTurn().turn} · area ${AGES[age][1]}`));
+  l.append(el("span",{class:"age-a"}, AGES[age][0]), el("span",{class:"age-sep"}, " · "), el("span",{class:"age-b"}, `area ${AGES[age][1]}`));
 }
 $("menuBtn").onclick = () => {
   const item = (title, sub, fn) => el("button",{type:"button", class:"link", style:"min-height:60px", onclick:()=>{ closeModal(); fn(); }},
