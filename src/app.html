@@ -805,7 +805,7 @@ function paintMap(){
     const edgeOf = (id, n) => { const [c,r] = parse(id), [nc,nr] = parse(n); return edgeNeighbors(c,r).findIndex(([a,b]) => a === nc && b === nr); };
     // the river runs straight through this hex (in one side, out the opposite)
     const across = id => { const ls = rv.has(id) ? links.get(id) : []; return ls.length === 2 && Math.abs(edgeOf(id, ls[0]) - edgeOf(id, ls[1])) === 3; };
-    const lines = [];
+    const lines = [], mouths = [];
     const curve = (a, b, c2, e) => { const pts = []; for (let i = 0; i <= 12; i++){ const t = i/12, u = 1-t;
       pts.push([u*u*u*a[0]+3*u*u*t*b[0]+3*u*t*t*c2[0]+t*t*t*e[0], u*u*u*a[1]+3*u*u*t*b[1]+3*u*t*t*c2[1]+t*t*t*e[1]]); } lines.push(pts); };
     const h = S*.55;
@@ -813,7 +813,8 @@ function paintMap(){
       const [c,r] = parse(id), [cx,cy] = center(c,r);
       if (!vis(cx,cy)) continue;
       // where the river leaves this hex: the middle of each edge it crosses (a little way into water); t points out
-      const ends = links.get(id).map(n => { const [nx,ny] = center(...parse(n)), dx = nx-cx, dy = ny-cy, L = Math.hypot(dx,dy), into = rv.has(n) ? 0 : .3;
+      const ends = links.get(id).map(n => { const [nx,ny] = center(...parse(n)), dx = nx-cx, dy = ny-cy, L = Math.hypot(dx,dy), into = 0;
+        if (!rv.has(n)) mouths.push([(cx+nx)/2, (cy+ny)/2, dx/L, dy/L]);
         return { x: (cx+nx)/2 + dx*into, y: (cy+ny)/2 + dy*into, tx: dx/L, ty: dy/L, edge: edgeOf(id, n), id: n }; });
       const ccx = cx + wob(cx*1.3+cy)*S*.18, ccy = cy + wob(cy*1.7+cx)*S*.18;
       if (!ends.length){ curve([cx-S*.5,cy+S*.25],[cx-S*.15,cy-S*.3],[cx+S*.15,cy+S*.3],[cx+S*.5,cy-S*.25]); continue; }   // a lone river hex
@@ -834,15 +835,23 @@ function paintMap(){
       }
     }
     if (lines.length){
-      // the river is the water's own color, with the fine coastline ink along its banks
-      ctx.beginPath();
-      for (const pts of lines){ ctx.moveTo(...pts[0]);
-        for (let i = 1; i < pts.length - 1; i++) ctx.quadraticCurveTo(pts[i][0], pts[i][1], (pts[i][0]+pts[i+1][0])/2, (pts[i][1]+pts[i+1][1])/2);
-        ctx.lineTo(...pts[pts.length-1]); }
+      // the river is a strip of water through the land, banked in the same ink as the coastlines,
+      // so it reads as the hex split in two; at the sea the banks stop at the shore and the river opens into it
       const water = (LAND.find(l => l[0]==="sea") || [0,0,"#2f5d86"])[2], w = Math.max(3*lw, S*.28);
+      const river = new Path2D();
+      for (const pts of lines){ river.moveTo(...pts[0]);
+        for (let i = 1; i < pts.length - 1; i++) river.quadraticCurveTo(pts[i][0], pts[i][1], (pts[i][0]+pts[i+1][0])/2, (pts[i][1]+pts[i+1][1])/2);
+        river.lineTo(...pts[pts.length-1]); }
+      const land = new Path2D();     // the river hexes: banks are kept inside them, so nothing pokes into the sea
+      for (const id of rv){ const [cx,cy] = center(...parse(id)); for (let i=0;i<6;i++){ const a = Math.PI/180*(60*i-30), x = cx+S*1.02*Math.cos(a), y = cy+S*1.02*Math.sin(a); i ? land.lineTo(x,y) : land.moveTo(x,y); } land.closePath(); }
+      ctx.save(); ctx.clip(land);
       ctx.lineCap = "round"; ctx.lineJoin = "round";
-      ctx.strokeStyle = ink; ctx.lineWidth = w + Math.max(1.2*lw, S*.05); ctx.stroke();              // banks
-      ctx.strokeStyle = flatOf(water); ctx.lineWidth = w; ctx.stroke();
+      ctx.strokeStyle = ink; ctx.lineWidth = w + Math.max(1.6*lw, S*.085); ctx.stroke(river);         // banks, as bold as the coastline
+      ctx.strokeStyle = flatOf(water); ctx.lineWidth = w; ctx.stroke(river);
+      ctx.restore();
+      // the mouth: carry the water across the coastline into the sea
+      ctx.lineCap = "butt"; ctx.strokeStyle = flatOf(water); ctx.lineWidth = w;
+      ctx.beginPath(); for (const [x,y,tx,ty] of mouths){ ctx.moveTo(x - tx*S*.06, y - ty*S*.06); ctx.lineTo(x + tx*S*.12, y + ty*S*.12); } ctx.stroke();
     }
   }
   // natures in ink along the bottom of the hex; markers as pieces in the middle
