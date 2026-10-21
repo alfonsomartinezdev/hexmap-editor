@@ -227,6 +227,7 @@ canvas.nat,.rowbtn .rv canvas.nat,.opt canvas.nat{border:0;border-radius:0;backg
 #showLabel .age-sep{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
 #showLabel .sh-b{font-family:var(--f-mono);font-weight:700;font-size:.66rem;letter-spacing:.04em;text-transform:uppercase;margin-top:2px}
 .menubtn .age-a{font-family:var(--f-display);font-weight:700;font-size:1.3rem}
+.menubtn .hexmark{width:.95em;height:.95em;vertical-align:-.15em;margin-right:2px;fill:none;stroke:currentColor;stroke-width:2.4;stroke-linejoin:round}
 .menubtn .age-b{font-family:var(--f-mono);font-weight:700;font-size:.66rem;letter-spacing:.04em;text-transform:uppercase;margin-top:1px}
 .menubtn .age-sep{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
 .showbtn span{font-family:var(--f-display);font-weight:700;font-size:1.25rem;line-height:1}
@@ -1839,10 +1840,18 @@ function openPeoples(pid){
   openModal("Peoples", peoples.size ? [el("p",{class:"note"}, "Tap a people to change its border color."), list] : [el("p",{class:"empty"}, "No peoples yet. Add one from a hex's Settled by.")]);
 }
 { const t = readThemeCookie() || lsGet("soc-theme"); document.documentElement.dataset.mode = t === "dark" ? "dark" : "light"; }
+// a small outlined hex: "×19" next to it reads as "areas of 19 hexes"
+function hexMark(){
+  const ns = "http://www.w3.org/2000/svg", svg = document.createElementNS(ns, "svg"), poly = document.createElementNS(ns, "polygon");
+  svg.setAttribute("viewBox", "0 0 20 20"); svg.setAttribute("aria-hidden", "true"); svg.setAttribute("class", "hexmark");
+  poly.setAttribute("points", [0,1,2,3,4,5].map(i => { const a = Math.PI/180*(60*i-30); return `${(10+8.5*Math.cos(a)).toFixed(1)},${(10+8.5*Math.sin(a)).toFixed(1)}`; }).join(" "));
+  svg.append(poly); return svg;
+}
 function renderAge(){
   // "First Age" in marker, "area 19" typed underneath; reads as one phrase to screen readers
   const l = $("ageLabel"); l.textContent = "";
-  l.append(el("span",{class:"age-a"}, AGES[age][0]), el("span",{class:"age-sep"}, " · "), el("span",{class:"age-b"}, `area ${AGES[age][1]}`));
+  l.append(el("span",{class:"age-a"}, AGES[age][0]), el("span",{class:"age-sep"}, " · "), el("span",{class:"age-b"}, hexMark(), `×${AGES[age][1]}`));
+  $("menuBtn").setAttribute("aria-label", `Menu. ${AGES[age][0]}, one area is ${AGES[age][1]} ${AGES[age][1]===1?"hex":"hexes"}`);
 }
 $("menuBtn").onclick = () => {
   const item = (title, sub, fn) => el("button",{type:"button", class:"link", style:"min-height:60px", onclick:()=>{ closeModal(); fn(); }},
