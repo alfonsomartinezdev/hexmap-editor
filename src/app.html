@@ -832,6 +832,7 @@ function paintMap(){
     // the shapes, as waypoints in (along, across) units of the chord between the two edge points, centred on its middle
     const SHAPES = {
       straight: [],
+      soft: [[0, .16]],                         // a straight run with a gentle sway, so it doesn't look ruled
       arc: [[0, .3]],
       S: [[-.2, .24], [.2, -.24]],
       oxbow: [[-.12, .12], [-.3, .36], [-.2, .56], [.2, .56], [.3, .36], [.12, .12]],
@@ -872,9 +873,9 @@ function paintMap(){
       if (ends.length === 2){
         let [a,b] = ends; if (a.edge > b.edge) [a,b] = [b,a];          // draw in edge order so the shape is the same from either direction
         const gap = Math.min(Math.abs(a.edge - b.edge), 6 - Math.abs(a.edge - b.edge)), opposite = gap === 3;
-        const shape = !bends || gap === 1 ? "straight" : POOL[opposite ? "across" : "wide"][hexColour(c, r)];
+        const shape = !bends ? (opposite ? "soft" : "straight") : gap === 1 ? "straight" : POOL[opposite ? "across" : "wide"][hexColour(c, r)];
         // straight across, a bend can go either way; on a turn it has to bulge into the hex
-        const side = opposite ? (wob(c*13.1 + r*7.7) > 0 ? 1 : -1) : 1;
+        const side = opposite ? (bends ? (wob(c*13.1 + r*7.7) > 0 ? 1 : -1) : ((c + r) % 2 ? 1 : -1)) : 1;
         if (shape === "straight") curve([a.x,a.y],[a.x - a.tx*h, a.y - a.ty*h],[b.x - b.tx*h, b.y - b.ty*h],[b.x,b.y]);
         else shaped(a, b, shape, side, cx, cy);
         continue;
