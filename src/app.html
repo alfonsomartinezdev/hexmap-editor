@@ -875,7 +875,7 @@ function paintMap(){
         const gap = Math.min(Math.abs(a.edge - b.edge), 6 - Math.abs(a.edge - b.edge)), opposite = gap === 3;
         const shape = !bends ? (opposite ? "soft" : "straight") : gap === 1 ? "straight" : POOL[opposite ? "across" : "wide"][hexColour(c, r)];
         // straight across, a bend can go either way; on a turn it has to bulge into the hex
-        const side = opposite ? (bends ? (wob(c*13.1 + r*7.7) > 0 ? 1 : -1) : ((c + r) % 2 ? 1 : -1)) : 1;
+        const side = opposite ? (bends ? (wob(c*13.1 + r*7.7) > 0 ? 1 : -1) : ((a.edge % 3 === 0 ? c : r) % 2 ? 1 : -1)) : 1;
         if (shape === "straight") curve([a.x,a.y],[a.x - a.tx*h, a.y - a.ty*h],[b.x - b.tx*h, b.y - b.ty*h],[b.x,b.y]);
         else if (shape === "soft"){
           // straight across: the same curve as the north-south pieces (same handles, same depth of bend),
@@ -1966,6 +1966,7 @@ window.__soc = {
   state: () => ({ selection:[...selection], draft:Object.fromEntries(draft), base:Object.fromEntries(base), posts, age, cols:COLS, rows:ROWS, adding, sheetCat }),
   view: id => view(id),
   zoomIn: () => { if (hexPx() < 46) zoomAt(46/hexPx(), W/2, H/2); },
+  centerOn: (c, r, px) => { V.k = (px || 120) / (SQ3*S); const [x,y] = center(c,r); V.ox = W/2 - x*V.k; V.oy = H/2 - y*V.k; draw(); },
   highlight: () => highlight ? [...highlight.set] : null
 };
 window.__hexScreen = (c,r) => { const [x,y] = center(c,r); const b = canvas.getBoundingClientRect(); return [b.left + x*V.k+V.ox, b.top + y*V.k+V.oy]; }; // used by automated checks
