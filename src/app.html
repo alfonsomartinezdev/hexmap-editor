@@ -1124,7 +1124,6 @@ function renderShow(first){
   who.append(chip("Everyone", filt.who === null, {who: null}));
   for (const p of players()) who.append(chip(p.label, filt.who === p.key, {who: p.key}));
   const i = Math.max(0, turns.findIndex(t => t.key === showTurn)), t = turns[i] || {label:"This turn", key:null};
-  const n = t.key ? matching(filt.who, t.key).size : 0;
   const step = (d, label) => el("button",{type:"button", class:"step", "aria-label": label, disabled: !turns[i+d] || null,
     onclick:()=>{ showTurn = turns[i+d].key; pick({when: showTurn}); }}, d > 0 ? "‹" : "›");
   const when = el("div",{class:"whenrow", role:"group", "aria-label":"When"},
@@ -1132,7 +1131,7 @@ function renderShow(first){
     el("div",{class:"stepper turnstep"},
       step(1, "Earlier turn"),
       el("button",{type:"button", class:"turnlabel", "aria-pressed": String(filt.when === t.key), onclick:()=>pick({when: t.key})},
-        el("strong",{}, t.label), el("span",{}, [t.sub, `${n} ${n===1?"hex":"hexes"}`].filter(Boolean).join(" · "))),
+        el("strong",{}, t.label), t.sub ? el("span",{}, t.sub) : null),
       step(-1, "Later turn")));
   const body = [el("p",{class:"sub"}, "Who"), who, el("p",{class:"sub"}, "When"), when];
   if (first || modal.hidden) openModal("Show", body, {light: true});
@@ -1554,7 +1553,7 @@ function renderDraftBar(){
       el("button",{type:"button", class:"btn", onclick:()=>{ confirmDiscard=false; renderDraftBar(); }}, "Keep"));
     return;
   }
-  bar.append(el("span",{class:"what"}, el("span",{class:"dot","aria-hidden":"true"}), [n ? `${n} ${n===1?"hex":"hexes"} changed` : "", rc ? `${rc} ${rc===1?"border color":"border colors"} changed` : ""].filter(Boolean).join(", ") + " · not published yet"),
+  bar.append(el("span",{class:"what"}, el("span",{class:"dot","aria-hidden":"true"}), "Changes not published yet"),
     el("button",{type:"button", class:"btn", disabled: !undoStack.length || null, onclick:undo}, "Undo"),
     el("button",{type:"button", class:"btn", onclick:()=>{ confirmDiscard=true; renderDraftBar(); }}, "Start over"),
     el("span",{class:"grow"}),
@@ -1720,7 +1719,7 @@ async function openHistory(){
   for (let i = posts.length-1; i >= 0; i--){
     const p = posts[i], n = Object.keys(p.changes||{}).length;
     list.append(el("button",{type:"button", class:"link", "aria-current": histIdx===i ? "true" : null, onclick:()=>{ showHistory(i); closeModal(); }},
-      el("strong",{}, postName(p)), n ? `${n} ${n===1?"hex":"hexes"}` : p.world && p.world.newMap ? "Started a new map" : p.world && AGES[p.world.age] ? AGES[p.world.age][0] : "", el("span",{class:"when"}, when(p.at))));
+      el("strong",{}, postName(p)), n ? "" : p.world && p.world.newMap ? "Started a new map" : p.world && AGES[p.world.age] ? AGES[p.world.age][0] : "", el("span",{class:"when"}, when(p.at))));
   }
   openModal("History", [histIdx !== null ? el("button",{type:"button", class:"btn", onclick:()=>{ showHistory(null); closeModal(); }}, "Back to the map now") : null, list].filter(Boolean));
 };
@@ -1918,10 +1917,10 @@ function announceNew(list){
   if (!theirs.length) return;
   const who = [...new Set(theirs.map(postName))], name = who.length === 1 ? who[0] : "Other players";
   const ids = new Set(theirs.flatMap(p => Object.keys(p.changes || {}))), n = ids.size;
-  let msg = n ? `${name} published ${n} ${n===1?"hex":"hexes"}.` : `${name} changed the age.`;
+  let msg = n ? `${name} published changes.` : `${name} changed the age.`;
   if (draft.size){
     const overlap = [...ids].filter(id => draft.has(id)).length;
-    msg += overlap ? ` ${overlap} of them ${overlap===1?"is":"are"} in your unpublished changes. Check the map before you post.` : " Check the map before you post.";
+    msg += overlap ? " Some of them are hexes you're editing. Check the map before you post." : " Check the map before you post.";
   }
   toast(msg, draft.size ? 6000 : 4000); say(msg);
 }

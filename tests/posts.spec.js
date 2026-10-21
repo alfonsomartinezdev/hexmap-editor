@@ -10,7 +10,7 @@ test.describe("drafts", () => {
     await expect(app.footer("Done")).toBeVisible();
     await app.done();
     const bar = app.page.locator("#draftBar");
-    await expect(bar).toContainText("1 hex changed · not published yet");
+    await expect(bar).toContainText("Changes not published yet");
     for (const name of ["Undo", "Start over", "Publish post"]) await expect(bar.getByRole("button", { name, exact: true })).toBeVisible();
   });
 
