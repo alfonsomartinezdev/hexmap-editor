@@ -841,9 +841,18 @@ function paintMap(){
       let vx = -uy, vy = ux;
       if (Math.hypot(mx + vx - cx, my + vy - cy) > Math.hypot(mx - vx - cx, my - vy - cy)) { vx = -vx; vy = -vy; }   // "across" points into the hex
       vx *= side; vy *= side;
-      const sc = L, way = SHAPES[shape].map(([al, ac]) => [mx + ux*al*sc + vx*ac*sc, my + uy*al*sc + vy*ac*sc]);
+      const sa = L*.85, sx = S*.95, way = SHAPES[shape].map(([al, ac]) => [mx + ux*al*sa + vx*ac*sx, my + uy*al*sa + vy*ac*sx]);
       const m = L*.9;
       through([a.x,a.y], [-a.tx*m, -a.ty*m], [b.x,b.y], [b.tx*m, b.ty*m], way);
+      // keep the bed inside the hex: pull any point that strays past an inner hex back toward the centre
+      // (the limit opens up near the ends so the river still reaches the edges)
+      const pts = lines[lines.length-1], n = pts.length - 1;
+      for (let i = 1; i < n; i++){
+        const t = i/n, near = Math.max(0, 1 - Math.min(t, 1-t)*5), lim = S*(.7 + .17*near);
+        const dx = pts[i][0]-cx, dy = pts[i][1]-cy;
+        let d = 0; for (let k = 0; k < 3; k++){ const a2 = Math.PI/3*k; d = Math.max(d, Math.abs(dx*Math.cos(a2) + dy*Math.sin(a2))); }
+        if (d > lim){ const f = lim/d; pts[i] = [cx + dx*f, cy + dy*f]; }
+      }
     };
     const curve = (a, b, c2, e) => {           // a plain cubic, for sources and forks
       const pts = []; for (let i = 0; i <= 12; i++){ const t = i/12, u = 1-t;
@@ -883,7 +892,7 @@ function paintMap(){
       if (L.width !== canvas.width || L.height !== canvas.height){ L.width = canvas.width; L.height = canvas.height; }
       const C = L.getContext("2d"); C.setTransform(1,0,0,1,0,0); C.clearRect(0,0,L.width,L.height); C.setTransform(ctx.getTransform());
       // one flat, bright stroke with square chisel ends, laid on see-through so the hatching shows through
-      const w = Math.max(4*lw, S*.4);
+      const w = Math.max(3*lw, S*.28);
       C.lineCap = "butt"; C.lineJoin = "round"; C.strokeStyle = isDark() ? "#5fd0ff" : "#38b6ff";
       C.globalAlpha = 1; C.lineWidth = w; path(0,0,C); C.stroke();
       ctx.save(); ctx.setTransform(1,0,0,1,0,0); ctx.globalAlpha = isDark() ? .6 : .7; ctx.globalCompositeOperation = isDark() ? "screen" : "multiply";
