@@ -834,16 +834,15 @@ function paintMap(){
       }
     }
     if (lines.length){
-      // the river is the water's own color, crosshatched, with the fine coastline ink along its banks
+      // the river is the water's own color, with the fine coastline ink along its banks
       ctx.beginPath();
       for (const pts of lines){ ctx.moveTo(...pts[0]);
         for (let i = 1; i < pts.length - 1; i++) ctx.quadraticCurveTo(pts[i][0], pts[i][1], (pts[i][0]+pts[i+1][0])/2, (pts[i][1]+pts[i+1][1])/2);
         ctx.lineTo(...pts[pts.length-1]); }
-      const water = (LAND.find(l => l[0]==="sea") || [0,0,"#2f5d86"])[2], w = Math.max(3*lw, S*.28), f = 15/120;
+      const water = (LAND.find(l => l[0]==="sea") || [0,0,"#2f5d86"])[2], w = Math.max(3*lw, S*.28);
       ctx.lineCap = "round"; ctx.lineJoin = "round";
       ctx.strokeStyle = ink; ctx.lineWidth = w + Math.max(1.2*lw, S*.05); ctx.stroke();              // banks
-      if (px >= 14){ ctx.save(); ctx.scale(f, f); ctx.strokeStyle = ctx.createPattern(hatchTile(water, "cross"), "repeat"); ctx.lineWidth = w/f; ctx.stroke(); ctx.restore(); }
-      else { ctx.strokeStyle = flatOf(water); ctx.lineWidth = w; ctx.stroke(); }
+      ctx.strokeStyle = flatOf(water); ctx.lineWidth = w; ctx.stroke();
     }
   }
   // natures in ink along the bottom of the hex; markers as pieces in the middle
