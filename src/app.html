@@ -843,7 +843,7 @@ function paintMap(){
       if (Math.hypot(mx + vx - cx, my + vy - cy) > Math.hypot(mx - vx - cx, my - vy - cy)) { vx = -vx; vy = -vy; }   // "across" points into the hex
       vx *= side; vy *= side;
       const sa = L*.85, sx = S*.95, way = SHAPES[shape].map(([al, ac]) => [mx + ux*al*sa + vx*ac*sx, my + uy*al*sa + vy*ac*sx]);
-      const m = L*.9, tilt = shape === "soft" ? .55 : 0;     // a soft run crosses edges at a slant, like a sine wave, so hex-to-hex it reads as one smooth meander
+      const m = L*.9, tilt = 0;     // a soft run crosses edges at a slant, like a sine wave, so hex-to-hex it reads as one smooth meander
       through([a.x,a.y], [(-a.tx + vx*tilt)*m, (-a.ty + vy*tilt)*m], [b.x,b.y], [(b.tx - vx*tilt)*m, (b.ty - vy*tilt)*m], way);
       // keep the bed inside the hex: pull any point that strays past an inner hex back toward the centre
       // (the limit opens up near the ends so the river still reaches the edges)
@@ -894,7 +894,7 @@ function paintMap(){
       const C = L.getContext("2d"); C.setTransform(1,0,0,1,0,0); C.clearRect(0,0,L.width,L.height); C.setTransform(ctx.getTransform());
       // one flat, bright stroke with square chisel ends, laid on see-through so the hatching shows through
       const w = Math.max(3*lw, S*.28);
-      C.lineCap = "butt"; C.lineJoin = "round"; C.strokeStyle = isDark() ? "#5fd0ff" : "#38b6ff";
+      C.lineCap = "round"; C.lineJoin = "round"; C.strokeStyle = isDark() ? "#5fd0ff" : "#38b6ff";
       C.globalAlpha = 1; C.lineWidth = w; path(0,0,C); C.stroke();
       ctx.save(); ctx.setTransform(1,0,0,1,0,0); ctx.globalAlpha = isDark() ? .6 : .7; ctx.globalCompositeOperation = isDark() ? "screen" : "multiply";
       ctx.drawImage(L, 0, 0); ctx.restore();
