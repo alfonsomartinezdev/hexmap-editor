@@ -367,8 +367,8 @@ const lsGet = k => { try { return localStorage.getItem(k); } catch(e){ return nu
 const lsSet = (k,v) => { try { localStorage.setItem(k, v); } catch(e){} };
 let deviceId = lsGet("soc-device"); if (!deviceId){ deviceId = "d_" + Math.random().toString(36).slice(2,12); lsSet("soc-device", deviceId); }
 const myName = () => (lsGet("soc-name") || "").trim();
-// TEMPORARY: river style experiments
-const riverStyle = { highlighter: lsGet("soc-river-hl") === "1", bends: lsGet("soc-river-bends") !== "0" };
+// rivers are drawn as a highlighter stroke; the fixed bends per hex are kept but switched off for now
+const riverStyle = { highlighter: true, bends: false };
 const names = new Map();        // user id -> display name
 
 const $ = id => document.getElementById(id);
@@ -1901,10 +1901,6 @@ const themeToggle = () => switchRow("Dark mode", isDark, on => setTheme(on ? "da
 // rulers are switched off for now; set RULERS_AVAILABLE to bring back the menu switch
 const RULERS_AVAILABLE = false;
 const rulersOn = () => RULERS_AVAILABLE && lsGet("soc-rulers") !== "off";
-// TEMPORARY: river style experiments (riverStyle is defined near the top), switchable from the menu while we compare
-const riverToggles = () => [
-  switchRow("Rivers: highlighter (test)", () => riverStyle.highlighter, on => { riverStyle.highlighter = on; lsSet("soc-river-hl", on ? "1" : "0"); draw(); }),
-  switchRow("Rivers: bends (test)", () => riverStyle.bends, on => { riverStyle.bends = on; lsSet("soc-river-bends", on ? "1" : "0"); draw(); })];
 const rulersToggle = () => switchRow("Rulers", rulersOn, on => { lsSet("soc-rulers", on ? "on" : "off"); draw(); });
 // peoples' border colors, changed from the menu; the change is a draft like any other
 function openPeoples(pid){
@@ -1941,7 +1937,6 @@ $("menuBtn").onclick = () => {
   openModal("Menu", [
     RULERS_AVAILABLE ? rulersToggle() : null,
     themeToggle(),
-    ...riverToggles(),
     item("History", posts.length ? `${posts.length} published ${posts.length===1?"post":"posts"}` : "No posts yet", openHistory),
     window.RULES_MD ? item("Rules", "How to play Songs of Creation", openRules) : null,
     item("Key", "What the colors and symbols mean", openKey),
