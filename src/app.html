@@ -106,6 +106,16 @@ canvas{display:block;width:100%;height:100%;touch-action:none;-webkit-touch-call
 .sub{font-size:.8rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:0}
 .details{display:flex;flex-direction:column;gap:8px;font-size:.95rem}
 .chips{display:flex;flex-wrap:wrap;gap:6px}
+.modal.light{background:transparent}
+.chip.pick{padding:0 14px;min-height:40px;font-weight:700;cursor:pointer}
+.chip.pick[aria-pressed="true"]{background:var(--accent);color:#141414}
+.lastby{display:flex;justify-content:space-between;gap:8px;padding:10px 4px 2px;font-size:.88rem;background:none;border:0;color:inherit;width:100%;text-align:left;cursor:pointer}
+.whenrow{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.turnstep{flex:1;min-width:220px;display:flex;align-items:center}
+.turnstep .step{flex:0 0 44px}
+.turnlabel{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;background:none;border:0;padding:4px 6px;border-radius:10px;cursor:pointer;color:inherit;font:inherit}
+.turnlabel span{font-size:.75rem;opacity:.75}
+.turnlabel[aria-pressed="true"]{background:var(--accent);color:#141414}
 .chip{display:inline-flex;align-items:center;gap:4px;min-height:36px;padding:0 4px 0 12px;border-radius:999px;border:1px solid var(--line);background:var(--raise);font-size:.9rem}
 .chip button{min-width:32px;min-height:32px;border:0;background:none;border-radius:50%;cursor:pointer;font-size:1.1rem;color:var(--muted)}
 .mk{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
@@ -449,8 +459,12 @@ const hexPx = () => SQ3*S*V.k;
 function clampView(){
   const m = 80, top = 110, wW = worldW()*V.k, wH = worldH()*V.k;
   const span = (a, b, v) => Math.min(Math.max(v, Math.min(a, b)), Math.max(a, b));
+  // a panel over the bottom of the map: let the map slide up far enough to see what it covers
+  let cover = 0;
+  try { const sb = stage.getBoundingClientRect(), pnl = !modal.hidden && modal.classList.contains("light") ? modal.querySelector(".mpanel") : null;
+    if (pnl) cover = Math.max(0, sb.bottom - pnl.getBoundingClientRect().top); } catch(e){}
   V.ox = span(W - wW - m, m, V.ox);
-  V.oy = span(H - wH - m, top, V.oy);
+  V.oy = span(H - wH - m - cover, top, V.oy);
 }
 function zoomAt(f, sx, sy){
   const k2 = Math.min(Math.max(V.k*f, fitK*0.8), 130/(SQ3*S));
@@ -1079,19 +1093,50 @@ function applyFilter(quiet){
   if (!quiet) say(highlight ? `Highlighting ${highlight.set.size} hexes: ${highlight.label}.` : "Showing everyone.");
   draw();
 }
-function setHighlight(patch){ if (patch === null){ filt.who = null; filt.when = null; } else Object.assign(filt, patch); applyFilter(); }
+function setHighlight(patch){ if (patch === null){ filt.who = null; filt.when = null; } else Object.assign(filt, patch); applyFilter(); bringIntoView(); }
+// if none of the highlighted hexes are in sight (above any open panel), slide the map to them
+function bringIntoView(){
+  if (!highlight || !highlight.set.size) return;
+  const panel = !modal.hidden ? modal.querySelector(".mpanel") : (!sheet.hidden ? sheet : null);
+  const sb = stage.getBoundingClientRect(), bottom = panel ? Math.min(H, panel.getBoundingClientRect().top - sb.top) : H, top = 110;
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity, seen = false;
+  for (const id of highlight.set){
+    const [c,r] = parse(id); if (!inB(c,r)) continue; const [cx,cy] = center(c,r), sx = cx*V.k + V.ox, sy = cy*V.k + V.oy;
+    if (sx > 0 && sx < W && sy > top && sy < bottom) seen = true;
+    x0 = Math.min(x0, cx); x1 = Math.max(x1, cx); y0 = Math.min(y0, cy); y1 = Math.max(y1, cy);
+  }
+  if (seen || x0 === Infinity) return;
+  V.ox = W/2 - (x0+x1)/2*V.k; V.oy = (top + bottom)/2 - (y0+y1)/2*V.k; draw();
+}
+// Show: who as chips, when as a stepper through the turns. The panel stays open and the map
+// updates behind it, so picking a player and a turn is one visit.
+let showTurn = null;      // the turn the stepper is on, even while "All time" is picked
 async function openShow(){
   await loadNames([...new Set(posts.map(p => p.by))]);
-  const count = n => `${n} ${n===1?"hex":"hexes"}`;
-  const row = (list, label, sub, on, patch) => list.append(el("button",{type:"button", class:"link", "aria-current": on ? "true" : null, onclick:()=>{ closeModal(); setHighlight(patch); }},
-    el("strong",{}, label), sub ? el("span",{class:"when"}, sub) : null));
-  const who = el("div",{class:"keylist who"});
-  row(who, "Everyone", "", filt.who === null, {who: null});
-  for (const p of players()) row(who, p.label, count(matching(p.key, filt.when).size), filt.who === p.key, {who: p.key});
-  const when = el("div",{class:"keylist when"});
-  row(when, "All time", "", filt.when === null, {when: null});
-  for (const t of turnList()) row(when, t.label, [t.sub, count(matching(filt.who, t.key).size)].filter(Boolean).join(" · "), filt.when === t.key, {when: t.key});
-  openModal("Show", [el("p",{class:"sub"}, "Who"), who, el("p",{class:"sub"}, "When"), when]);
+  renderShow(true);
+}
+function renderShow(first){
+  const turns = turnList();
+  if (!showTurn || !turns.some(t => t.key === showTurn)) showTurn = filt.when || (turns[0] && turns[0].key);
+  const pick = patch => { setHighlight(patch); renderShow(); };
+  const chip = (label, on, patch, extra) => el("button",{type:"button", class:"chip pick", "aria-pressed": String(on), onclick:()=>pick(patch)}, label, extra || null);
+  const who = el("div",{class:"chips who", role:"group", "aria-label":"Who"});
+  who.append(chip("Everyone", filt.who === null, {who: null}));
+  for (const p of players()) who.append(chip(p.label, filt.who === p.key, {who: p.key}));
+  const i = Math.max(0, turns.findIndex(t => t.key === showTurn)), t = turns[i] || {label:"This turn", key:null};
+  const n = t.key ? matching(filt.who, t.key).size : 0;
+  const step = (d, label) => el("button",{type:"button", class:"step", "aria-label": label, disabled: !turns[i+d] || null,
+    onclick:()=>{ showTurn = turns[i+d].key; pick({when: showTurn}); }}, d > 0 ? "‹" : "›");
+  const when = el("div",{class:"whenrow", role:"group", "aria-label":"When"},
+    chip("All time", filt.when === null, {when: null}),
+    el("div",{class:"stepper turnstep"},
+      step(1, "Earlier turn"),
+      el("button",{type:"button", class:"turnlabel", "aria-pressed": String(filt.when === t.key), onclick:()=>pick({when: t.key})},
+        el("strong",{}, t.label), el("span",{}, [t.sub, `${n} ${n===1?"hex":"hexes"}`].filter(Boolean).join(" · "))),
+      step(-1, "Later turn")));
+  const body = [el("p",{class:"sub"}, "Who"), who, el("p",{class:"sub"}, "When"), when];
+  if (first || modal.hidden) openModal("Show", body, {light: true});
+  else { const b = $("mBody"); b.textContent = ""; b.append(...body); }
 }
 function selectHex(id, add){
   if (add || adding){
@@ -1308,6 +1353,15 @@ function rowsFor(ids){
     canWrite && !noLand ? el("span",{class:"track sm","aria-hidden":"true"}, el("span",{class:"knob"})) : null);
   box.append(row("Land", land, true), river, row("Natures", natV, !noLand), row("Settled by", ppl, !noLand),
     n === 1 ? row("Markers", mkV, !noLand || ms.length > 0) : el("div",{class:"rowgap","aria-hidden":"true"}));
+  // who last changed this hex, and when: a tap shows all of that player's work that turn
+  if (n === 1){
+    const last = [...posts].reverse().find(p => (p.changes || {})[ids[0]]);
+    if (last){
+      const t = turnAt(last.at || 0, agePeriods()), tk = turnKey(t), tl = (turnList().find(x => x.key === tk) || {label:`Turn ${t.turn}`}).label;
+      box.append(el("button",{type:"button", class:"link lastby", onclick:()=>{ setHighlight({who: playerKey(last), when: tk}); toast(`Showing ${postName(last)} · ${tl}`); }},
+        el("span",{}, "Last changed by ", el("strong",{}, postName(last)), ` · ${tl}`), el("span",{class:"when","aria-hidden":"true"}, "Show ›")));
+    }
+  }
   return box;
 }
 function applyAll(ids, fn, msg){ snapshot(); for (const id of ids) fn(id); sheetCat = null; sheetForm = null; afterEdit(); if (msg) { toast(msg); say(msg); } }
@@ -1585,6 +1639,7 @@ function openModal(title, body, opts){
   if (typeof resetSlide === "function") resetSlide();      // a new panel cancels one that is still sliding away
   $("hint").hidden = true;
   modal.querySelector(".mpanel").classList.toggle("tall", !!(opts && opts.tall));
+  modal.classList.toggle("light", !!(opts && opts.light));     // a see-through backdrop, so the map can be watched while choosing
   lastFocus = document.activeElement; $("mTitle").textContent = title; const b = $("mBody"); b.textContent = ""; b.append(...[body].flat().filter(x => x != null && x !== false));
   modal.hidden = false; $("mClose").focus();
 }

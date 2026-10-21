@@ -11,22 +11,18 @@ test.beforeEach(async ({ app }) => {
   await expect.poll(async () => (await app.state()).posts.length).toBe(2);
 });
 
+// the Show panel stays open while choosing; close it after picking
 const pick = async (app, label) => {
   await app.page.locator("#showBtn").click();
-  await app.page.locator("#mBody button.link", { hasText: label }).click();
+  await app.page.locator("#mBody .chips.who .chip", { hasText: label }).click();
+  await app.page.locator("#mClose").click(); await expect(app.page.locator("#modal")).toBeHidden();
 };
 const highlighted = app => app.page.evaluate(() => window.__soc.highlight());
 
-test("the picker lists every player with how many hexes they have changed, you first", async ({ app }) => {
+test("the picker lists every player as a chip, you first", async ({ app }) => {
   await expect(app.page.locator("#showLabel")).toHaveText("Show: Everyone");
   await app.page.locator("#showBtn").click();
-  const rows = app.page.locator("#mBody .keylist.who button.link");
-  await expect(rows).toHaveCount(3);
-  await expect(rows.nth(0)).toContainText("Everyone");
-  await expect(rows.nth(1)).toContainText("Ash (you)");
-  await expect(rows.nth(1)).toContainText("2 hexes");
-  await expect(rows.nth(2)).toContainText("Rowan");
-  await expect(rows.nth(2)).toContainText("2 hexes");
+  await expect(app.page.locator("#mBody .chips.who .chip")).toHaveText(["Everyone", "Ash (you)", "Rowan"]);
 });
 
 test("highlighting counts every hex a player ever touched, even if someone changed it since", async ({ app }) => {
