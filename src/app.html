@@ -846,12 +846,18 @@ function paintMap(){
       for (const id of rv){ const [cx,cy] = center(...parse(id)); for (let i=0;i<6;i++){ const a = Math.PI/180*(60*i-30), x = cx+S*1.02*Math.cos(a), y = cy+S*1.02*Math.sin(a); i ? land.lineTo(x,y) : land.moveTo(x,y); } land.closePath(); }
       ctx.save(); ctx.clip(land);
       ctx.lineCap = "round"; ctx.lineJoin = "round";
-      ctx.strokeStyle = ink; ctx.lineWidth = w + Math.max(1.6*lw, S*.085); ctx.stroke(river);         // banks, as bold as the coastline
+      ctx.strokeStyle = ink; ctx.lineWidth = w + 2*Math.max(1.6*lw, S*.085); ctx.stroke(river);       // banks, each as bold as the coastline
       ctx.strokeStyle = flatOf(water); ctx.lineWidth = w; ctx.stroke(river);
       ctx.restore();
-      // the mouth: carry the water across the coastline into the sea
-      ctx.lineCap = "butt"; ctx.strokeStyle = flatOf(water); ctx.lineWidth = w;
-      ctx.beginPath(); for (const [x,y,tx,ty] of mouths){ ctx.moveTo(x - tx*S*.06, y - ty*S*.06); ctx.lineTo(x + tx*S*.12, y + ty*S*.12); } ctx.stroke();
+      // the mouth: open a gap in the coastline, painted with the sea itself, so the river ends at the shore
+      if (mouths.length){
+        const gap = new Path2D(); for (const [x,y,tx,ty] of mouths){ gap.moveTo(x - tx*S*.02, y - ty*S*.02); gap.lineTo(x + tx*S*.09, y + ty*S*.09); }
+        const sea = landInfo("sea");
+        ctx.lineCap = "butt"; ctx.lineWidth = w;
+        if (px >= 14){ ctx.save(); ctx.scale(15/120, 15/120); ctx.strokeStyle = landFill(sea); ctx.lineWidth = w*120/15;
+          const g2 = new Path2D(); g2.addPath(gap, new DOMMatrix().scale(120/15)); ctx.stroke(g2); ctx.restore(); }
+        else { ctx.strokeStyle = flatOf(water); ctx.stroke(gap); }
+      }
     }
   }
   // natures in ink along the bottom of the hex; markers as pieces in the middle
