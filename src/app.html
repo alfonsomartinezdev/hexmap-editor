@@ -352,8 +352,12 @@ const customLand = new Map();   // key "x-<id>" -> {name,color}
 const customNat = new Map();    // name -> symbol
 const peoples = new Map();      // id -> {name,color}
 const undoStack = [];
+// "Tap a hex to change it" shows on a first visit only: it's remembered (cookie and storage) as soon as it has been seen,
+// and it goes away at the first touch of the map
 let hinted = false;
 try { hinted = localStorage.getItem("soc-hinted") === "1"; } catch(e){}
+try { hinted = hinted || /(?:^|;\s*)soc-hinted=1/.test(document.cookie); } catch(e){}
+function rememberHint(){ try { localStorage.setItem("soc-hinted","1"); } catch(e){} try { document.cookie = "soc-hinted=1; max-age=31536000; path=/; SameSite=Lax"; } catch(e){} }
 let selectMode = false, moveState = null, sheetCat = null, sheetForm = null, focusHex = null;
 let db = null, user = null, myId = null, canWrite = true;
 let backend = null;                                  // where posts live: claude, firebase or local
@@ -913,6 +917,7 @@ function say(t){ const l = $("live"); l.textContent = ""; setTimeout(() => l.tex
 const pts = new Map(); let G = null;
 const editing = () => histIdx === null && canWrite;
 canvas.addEventListener("pointerdown", e => {
+  if (!hinted){ hinted = true; rememberHint(); updateHint(); }
   canvas.setPointerCapture(e.pointerId); pts.set(e.pointerId, {x:e.offsetX, y:e.offsetY});
   if (pts.size === 1){
     G = {type:"pan", sx:e.offsetX, sy:e.offsetY, ox:V.ox, oy:V.oy, moved:false};
@@ -1183,12 +1188,13 @@ function afterSelect(id){
   sheetCat = canWrite && sel.length && sel.every(x => !(view(x)||{}).t) ? "Land" : null;
   autoLand = sheetCat === "Land";
   reveal = id && selection.has(id) ? id : null; if (reveal){ ensureVisible(...parse(id)); }
-  if (selection.size && !hinted){ hinted = true; try { localStorage.setItem("soc-hinted","1"); } catch(e){} }
+  if (selection.size && !hinted){ hinted = true; rememberHint(); }
   renderSheet(); draw();
 }
 function updateHint(){
   const h = $("hint"), show = !hinted && canWrite && histIdx === null && selection.size === 0 && modal.hidden;
   h.hidden = !show; if (!show) return;
+  rememberHint();                                   // seen once: not shown again on the next visit
   const t = "Tap a hex to change it";
   if (h.textContent !== t) h.textContent = t;
 }

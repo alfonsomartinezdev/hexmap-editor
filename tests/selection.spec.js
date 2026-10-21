@@ -171,3 +171,10 @@ test("growing twice in a row doesn't land on the ✕: the + stays put", async ({
   await grow.click();
   expect((await app.state()).selection).toHaveLength(19);
 });
+
+test("the hint only shows on the first visit, and goes at the first touch", async ({ app }) => {
+  await expect(app.page.locator("#hint")).toBeVisible();
+  await app.page.reload(); await app.page.waitForFunction(() => window.__soc);
+  await expect(app.page.locator("#hint")).toBeHidden();
+});
+
