@@ -877,6 +877,12 @@ function paintMap(){
         // straight across, a bend can go either way; on a turn it has to bulge into the hex
         const side = opposite ? (bends ? (wob(c*13.1 + r*7.7) > 0 ? 1 : -1) : ((c + r) % 2 ? 1 : -1)) : 1;
         if (shape === "straight") curve([a.x,a.y],[a.x - a.tx*h, a.y - a.ty*h],[b.x - b.tx*h, b.y - b.ty*h],[b.x,b.y]);
+        else if (shape === "soft"){
+          // straight across: the same curve as the north-south pieces (same handles, same depth of bend),
+          // just pushed to one side; alternate sides so a long run waves like the north-south rivers
+          const L = Math.hypot(b.x-a.x, b.y-a.y) || 1, d = S*.32*side, nx = -(b.y-a.y)/L*d, ny = (b.x-a.x)/L*d;
+          curve([a.x,a.y],[a.x - a.tx*h + nx, a.y - a.ty*h + ny],[b.x - b.tx*h + nx, b.y - b.ty*h + ny],[b.x,b.y]);
+        }
         else shaped(a, b, shape, side, cx, cy);
         continue;
       }
