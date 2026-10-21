@@ -837,7 +837,7 @@ function paintMap(){
     if (lines.length){
       // the river is a strip of water through the land, banked in the same ink as the coastlines,
       // so it reads as the hex split in two; at the sea the banks stop at the shore and the river opens into it
-      const water = (LAND.find(l => l[0]==="sea") || [0,0,"#2f5d86"])[2], w = Math.max(2.4*lw, S*.2);
+      const water = (LAND.find(l => l[0]==="sea") || [0,0,"#2f5d86"])[2], w = Math.max(3*lw, S*.28);
       const river = new Path2D();
       for (const pts of lines){ river.moveTo(...pts[0]);
         for (let i = 1; i < pts.length - 1; i++) river.quadraticCurveTo(pts[i][0], pts[i][1], (pts[i][0]+pts[i+1][0])/2, (pts[i][1]+pts[i+1][1])/2);
@@ -848,8 +848,8 @@ function paintMap(){
       ctx.lineCap = "round"; ctx.lineJoin = "round";
       // banks in the water's own hatching color rather than black ink
       ctx.strokeStyle = isDark() ? mixHex(water, "#f3f0e6", .22) : mixHex(water, "#141414", .22);
-      ctx.lineWidth = w + 2*Math.max(1.1*lw, S*.05); ctx.stroke(river);
-      ctx.strokeStyle = washOf(water); ctx.lineWidth = w; ctx.stroke(river);
+      ctx.lineWidth = w + 2*Math.max(1.6*lw, S*.085); ctx.stroke(river);
+      ctx.strokeStyle = flatOf(water); ctx.lineWidth = w; ctx.stroke(river);
       ctx.restore();
       // the mouth: open a gap in the coastline, painted with the sea itself, so the river ends at the shore
       if (mouths.length){
