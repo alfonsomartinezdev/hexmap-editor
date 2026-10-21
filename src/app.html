@@ -848,7 +848,7 @@ function paintMap(){
       ctx.lineCap = "round"; ctx.lineJoin = "round";
       // banks in the water's own hatching color rather than black ink
       ctx.strokeStyle = isDark() ? mixHex(water, "#f3f0e6", .22) : mixHex(water, "#141414", .22);
-      ctx.lineWidth = w + 2*Math.max(1.6*lw, S*.085); ctx.stroke(river);
+      ctx.lineWidth = w + 2*Math.max(1.1*lw, S*.05); ctx.stroke(river);
       ctx.strokeStyle = flatOf(water); ctx.lineWidth = w; ctx.stroke(river);
       ctx.restore();
       // the mouth: open a gap in the coastline, painted with the sea itself, so the river ends at the shore
