@@ -96,6 +96,8 @@ canvas{display:block;width:100%;height:100%;touch-action:none;-webkit-touch-call
 .cat{min-height:52px;border-radius:12px;border:1px solid var(--line);background:var(--raise);font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px}
 .opts{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(140px,100%),1fr));gap:8px}
 .opt{min-height:48px;border-radius:10px;border:1px solid var(--line);background:var(--raise);display:flex;align-items:center;gap:10px;padding:0 10px;cursor:pointer;text-align:left;font-size:.95rem}
+.landicon{display:block;border-radius:6px}
+.rowbtn .rv .landicon{width:26px !important;height:26px !important;flex:0 0 26px !important}
 .opt canvas,.keyrow canvas{width:28px;height:28px;flex:0 0 28px;border-radius:6px}
 .opt .sw,.keyrow .sw{width:22px;height:22px;flex:0 0 22px;border-radius:50%;border:2px solid var(--fg)}
 .opt.other{border-style:dashed;color:var(--muted)}
@@ -205,7 +207,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;-webkit-touch-call
 .rowbtn .rl{font-size:.72rem;text-transform:uppercase}
 .sub{font-size:.72rem}
 .rowbtn .chev{font-family:var(--f-display);font-weight:700;font-size:1.6rem;color:var(--fg)}
-.rowbtn .rv canvas,.opt canvas{border:2px solid var(--line);border-radius:5px 8px 6px 7px}
+.rowbtn .rv canvas,.opt canvas,.rowbtn .rv .landicon,.opt .landicon,.keyrow .landicon{border:2px solid var(--line);border-radius:5px 8px 6px 7px}
 canvas.nat,.rowbtn .rv canvas.nat,.opt canvas.nat{border:0;border-radius:0;background:none}
 
 /* hand-lettered headings, with a marker squiggle under the dialog titles */
@@ -1229,11 +1231,11 @@ function el(tag, attrs={}, ...kids){
   for (const kid of kids.flat()) if (kid!=null && kid!==false) e.append(kid);
   return e;
 }
-function landIcon(t){
-  const L = landInfo(t), cv = document.createElement("canvas"), d = 56; cv.width = d; cv.height = d;
-  cv.style.cssText = "width:28px;height:28px;flex:0 0 28px;display:block";
-  const c2 = cv.getContext("2d"); hatchOn(c2, L.color, L.pen, d); cv.setAttribute("aria-hidden","true"); return cv;
-}
+// land swatches are plain images of the hatching tile, not canvases: iPhones cap how much canvas memory
+// a page may use, and past that limit new canvases silently stay blank
+const hatchSwatch = (color, pen, px, extra) => el("span",{class:"landicon", "aria-hidden":"true",
+  style:`width:${px}px;height:${px}px;flex:0 0 ${px}px;background:${color} url(${hatchURL(color, pen)}) 0 0/100% 100%;${extra||""}`});
+function landIcon(t){ const L = landInfo(t); return hatchSwatch(L.color, L.pen, 28); }
 function natIcon(nm, px = 26){
   const cv = document.createElement("canvas"), d = 56; cv.width = d; cv.height = d; cv.setAttribute("aria-hidden","true"); cv.className = "nat";
   cv.style.cssText = `width:${px}px;height:${px}px;flex:0 0 ${px}px;display:block`;
@@ -1387,11 +1389,7 @@ function otherForm(label, withColor, onAdd){
   setTimeout(() => input.focus(), 0);
   return f;
 }
-function penTile(color, pen, px){
-  const cv = document.createElement("canvas"), d = 64; cv.width = d; cv.height = d; cv.setAttribute("aria-hidden","true");
-  cv.style.cssText = `width:${px}px;height:${px}px;display:block;border-radius:8px`;
-  hatchOn(cv.getContext("2d"), color, pen, d); return cv;
-}
+const penTile = (color, pen, px) => hatchSwatch(color, pen, px, "border-radius:8px");
 // a land is told apart by its color and pen together; say when a new one would look like an existing one
 function lookalike(color, pen){
   for (const [k,name,c,p] of LAND) if (c === color && p === pen) return name;
