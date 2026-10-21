@@ -811,7 +811,9 @@ function paintMap(){
     // with "bends" on, each way through a hex has its own clear shape, so a river reads at a glance:
     // straight runs, gentle arcs, S-bends and oxbow loops, always the same for the same pair of edges
     // straight across: a straight run, an S-bend or an oxbow; a wide turn: an arc, an S or an oxbow; a sharp turn: just the turn
-    const BEND = {"0-3":"straight","1-4":"S","2-5":"oxbow", "0-2":"arc","1-3":"S","2-4":"arc","3-5":"S","0-4":"oxbow","1-5":"arc"};
+    // touching hexes always get different shapes (a 3-colouring of the hex grid), so a long run never repeats the same bend
+    const POOL = { across: ["straight","S","oxbow"], wide: ["arc","S","oxbow"] };
+    const hexColour = (c, r) => { const q = c - (r - (r&1))/2; return (((q - r) % 3) + 3) % 3; };
     const bends = riverStyle.bends;
     const lines = [];
     // a smooth line from edge to edge through waypoints: Hermite curves, leaving and arriving square to the hex edges
@@ -860,8 +862,10 @@ function paintMap(){
       if (ends.length === 1){ const e = ends[0]; curve([ccx,ccy],[ccx + e.tx*h*.5, ccy + e.ty*h*.5],[e.x - e.tx*h, e.y - e.ty*h],[e.x,e.y]); continue; }   // a source
       if (ends.length === 2){
         let [a,b] = ends; if (a.edge > b.edge) [a,b] = [b,a];          // draw in edge order so the shape is the same from either direction
-        const shape = bends ? (BEND[`${a.edge}-${b.edge}`] || "arc") : "straight";
-        const opposite = Math.abs(a.edge - b.edge) === 3, side = opposite && (a.edge % 2) ? -1 : 1;   // bends on the short way round go inward
+        const gap = Math.min(Math.abs(a.edge - b.edge), 6 - Math.abs(a.edge - b.edge)), opposite = gap === 3;
+        const shape = !bends || gap === 1 ? "straight" : POOL[opposite ? "across" : "wide"][hexColour(c, r)];
+        // straight across, a bend can go either way; on a turn it has to bulge into the hex
+        const side = opposite ? (wob(c*13.1 + r*7.7) > 0 ? 1 : -1) : 1;
         if (shape === "straight") curve([a.x,a.y],[a.x - a.tx*h, a.y - a.ty*h],[b.x - b.tx*h, b.y - b.ty*h],[b.x,b.y]);
         else shaped(a, b, shape, side, cx, cy);
         continue;
