@@ -508,14 +508,16 @@ function flatOf(color){ return mixHex(washOf(color), isDark() ? mixHex(color, "#
 function washOf(color){ return isDark() ? mixHex(color, "#1d2220", .35) : mixHex(color, "#f1f0ea", .45); }
 // one 120px seamless tile per color and pen
 const tileCache = new Map();
-function hatchTile(color, pen){
-  const key = color + "|" + pen + "|" + (isDark() ? "d" : "l");
+// light: thinner strokes, closer to the wash (used for the big zoomed-out pattern)
+function hatchTile(color, pen, light){
+  const key = color + "|" + pen + "|" + (isDark() ? "d" : "l") + (light ? "|L" : "");
   if (tileCache.has(key)) return tileCache.get(key);
   const N = 120, cv = document.createElement("canvas"); cv.width = cv.height = N;
   const c = cv.getContext("2d");
   c.fillStyle = washOf(color); c.fillRect(0,0,N,N);
-  c.strokeStyle = c.fillStyle = isDark() ? mixHex(color, "#f3f0e6", .22) : mixHex(color, "#141414", .22);
-  c.lineCap = "round"; c.lineWidth = 4.2; c.globalAlpha = .9;
+  const ink = isDark() ? mixHex(color, "#f3f0e6", .22) : mixHex(color, "#141414", .22);
+  c.strokeStyle = c.fillStyle = light ? mixHex(ink, washOf(color), .45) : ink;
+  c.lineCap = "round"; c.lineWidth = light ? 2.2 : 4.2; c.globalAlpha = .9;
   const diag = (dir, alpha) => { c.globalAlpha = alpha;                        // lines N apart share a wobble so the tile repeats
     for (let k = 0, i = -N; i < 2*N; i += 15, k++){ const j = wob(k % 8 + dir) * 3; c.beginPath();
       if (dir > 0){ c.moveTo(i, 0); c.quadraticCurveTo(i + N/2 + j, N/2 - j, i + N, N); }
@@ -536,10 +538,10 @@ function hatchTile(color, pen){
   else { for (let y = 7.5, row = 0; y < N; y += 15, row++) for (let x = (row % 2) * 12; x < N + 12; x += 24){ c.beginPath(); c.moveTo(x, y + wob(x+y)*2); c.lineTo(x + 12, y + wob(x*3+y)*2); c.stroke(); } }
   tileCache.size > 60 && tileCache.clear(); tileCache.set(key, cv); return cv;
 }
-function landFill(L){
-  const key = L.color + "|" + L.pen + "|" + (isDark() ? "d" : "l");
+function landFill(L, light){
+  const key = L.color + "|" + L.pen + "|" + (isDark() ? "d" : "l") + (light ? "|L" : "");
   if (patCache.has(key)) return patCache.get(key);
-  const pat = ctx.createPattern(hatchTile(L.color, L.pen), "repeat");
+  const pat = ctx.createPattern(hatchTile(L.color, L.pen, light), "repeat");
   // no pat.setTransform: some Safari/iOS versions throw on it. The fill scales the context instead.
   patCache.set(key, pat); return pat;
 }
@@ -742,7 +744,7 @@ function paintMap(){
     if (L){ roughHex(cx,cy,S*1.03,seedOf(c,r),.04);
       // zoomed in: one tile = 15 map units. Zoomed out: the same hatching drawn bigger (one tile spans a few hexes),
       // so terrain still reads by its pattern instead of flattening to plain color
-      { const t = px >= 14 ? 15 : 70 / V.k; ctx.save(); ctx.scale(t/120, t/120); ctx.fillStyle = landFill(L); ctx.fill(); ctx.restore(); }
+      { const t = px >= 14 ? 15 : 70 / V.k; ctx.save(); ctx.scale(t/120, t/120); ctx.fillStyle = landFill(L, px < 14); ctx.fill(); ctx.restore(); }
       if (px > 9){ ctx.strokeStyle = isDark() ? "rgba(243,240,230,.1)" : "rgba(20,20,20,.09)"; ctx.lineWidth = Math.max(lw, S*.025); ctx.lineJoin = "round"; ctx.stroke(); } }
     else { hexPath(cx,cy,S+.03); ctx.fillStyle = unmade; ctx.fill();
       if (px > 9){ roughHex(cx,cy,S*.97,seedOf(c,r),.05); ctx.strokeStyle = grid; ctx.lineWidth = lw; ctx.globalAlpha = gridA; ctx.stroke(); ctx.globalAlpha = 1; } }
