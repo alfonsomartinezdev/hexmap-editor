@@ -361,7 +361,7 @@ let hinted = false;
 try { hinted = localStorage.getItem("soc-hinted") === "1"; } catch(e){}
 try { hinted = hinted || /(?:^|;\s*)soc-hinted=1/.test(document.cookie); } catch(e){}
 function rememberHint(){ try { localStorage.setItem("soc-hinted","1"); } catch(e){} try { document.cookie = "soc-hinted=1; max-age=31536000; path=/; SameSite=Lax"; } catch(e){} }
-let selectMode = false, moveState = null, sheetCat = null, sheetForm = null, focusHex = null;
+let moveState = null, sheetCat = null, sheetForm = null, focusHex = null;
 let db = null, user = null, myId = null, canWrite = true;
 let backend = null;                                  // where posts live: claude, firebase or local
 let draftDefs = {types:{}, peoples:{}};              // new lands, natures and peoples, published with the next post
@@ -497,8 +497,6 @@ function roughHex(cx,cy,s,seed,amt){
   ctx.closePath();
 }
 const seedOf = (c,r) => c*92.7 + r*37.3;
-function lum(hex){ const n=parseInt(hex.slice(1),16); return (0.299*(n>>16)+0.587*((n>>8)&255)+0.114*(n&255))/255; }
-const inkFor = color => lum(color) < 0.55 ? "rgba(255,255,255,.85)" : "rgba(20,24,34,.75)";
 /* ---- marker-on-paper land: a light wash of the land's color with its own pen stroke on top ---- */
 function hexToRgb(h){ const n = parseInt(h.slice(1),16); return [n>>16, (n>>8)&255, n&255]; }
 function mixHex(a, b, t){ const A = hexToRgb(a), B = hexToRgb(b); return "#" + A.map((v,i) => Math.round(v*(1-t) + B[i]*t).toString(16).padStart(2,"0")).join(""); }
@@ -544,7 +542,6 @@ function landFill(L){
   patCache.set(key, pat); return pat;
 }
 // the same hatching for the little tiles in menus and pickers
-function hatchOn(c2, color, pen, d){ const pat = c2.createPattern(hatchTile(color, pen), "repeat"); c2.save(); c2.scale(d / 120, d / 120); c2.fillStyle = pat; c2.fillRect(0,0,120,120); c2.restore(); }
 const hatchURL = (color, pen) => { const t = hatchTile(color, pen); return t._url || (t._url = t.toDataURL()); };
 
 function glyph(g, cx, cy, s, ink, label, c2){
@@ -1268,9 +1265,6 @@ function markerIcon(k, color, px = 28){
   cv.style.cssText = `width:${px}px;height:${px}px;flex:0 0 ${px}px;display:block`;
   drawMarker(cv.getContext("2d"), MARKERS[k] ? MARKERS[k][1] : "dot", d/2, d/2, d*.36, color, css("--line"), 7); return cv;
 }
-function drawMarkerOn(C, shape, x, y, r, color){
-  shapePath(C, shape, x, y, r); C.fillStyle = color; C.fill("evenodd"); C.lineWidth = r*.12; C.strokeStyle = "#1a1d26"; C.stroke();
-}
 function colorPicker(current, onPick){
   const box = el("div",{class:"swatches", role:"group", "aria-label":"Color"});
   for (const [name,hex] of PALETTE){
@@ -1393,17 +1387,6 @@ function rowsFor(ids){
   return box;
 }
 function applyAll(ids, fn, msg){ snapshot(); for (const id of ids) fn(id); sheetCat = null; sheetForm = null; afterEdit(); if (msg) { toast(msg); say(msg); } }
-function otherForm(label, withColor, onAdd){
-  let name = "", color = PALETTE[0][1];
-  const f = el("form",{class:"form", onsubmit:(e)=>{ e.preventDefault(); const v = name.trim(); if (!v) { input.focus(); return; } onAdd(v, color); }});
-  const input = el("input",{id:"otherName", placeholder:label, autocomplete:"off", "aria-label":label});
-  input.oninput = () => name = input.value;
-  f.append(el("label",{for:"otherName"}, label), input);
-  if (withColor) f.append(el("span",{class:"sub"},"Color"), colorPicker(color, c => color = c));
-  f.dataset.label = "Add";
-  setTimeout(() => input.focus(), 0);
-  return f;
-}
 const penTile = (color, pen, px) => hatchSwatch(color, pen, px, "border-radius:8px");
 // a land is told apart by its color and pen together; say when a new one would look like an existing one
 function lookalike(color, pen){
