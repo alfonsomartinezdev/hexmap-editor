@@ -12,7 +12,7 @@
   /* field notebook: newsprint paper, black marker, a yellow highlighter */
   --bg:#ecebe5; --surface:#f6f5f0; --raise:#ffffff; --fg:#141414; --muted:#4b4a45;
   --line:#141414; --accent:#ffd93b; --accent-ink:#141414; --accent-line:#141414; --sel:rgba(255,217,59,.6);
-  --void:#dedcd3; --unmade:#f1f0ea; --grid:#a9a69a; --draft:#e23d28; --danger:#c42b17;
+  --void:#dedcd3; --unmade:#e6e4dc; --grid:#a9a69a; --draft:#e23d28; --danger:#c42b17;
   --shadow:none; --hard:3px 3px 0 var(--line);
   --f-display:"Gaegu", "Comic Neue", "Chalkboard SE", "Marker Felt", cursive;
   --f-body:"Atkinson Hyperlegible", system-ui, -apple-system, "Segoe UI", sans-serif;
@@ -25,7 +25,7 @@
   /* chalk on a slate board */
   --bg:#1d2220; --surface:#252b28; --raise:#2e3531; --fg:#f3f0e6; --muted:#bfc3b9;
   --line:#f3f0e6; --accent:#ffd93b; --accent-ink:#141414; --accent-line:#ffd93b; --sel:rgba(255,217,59,.32);
-  --void:#171b19; --unmade:#2a302d; --grid:#56605a; --draft:#ff8a5c; --danger:#ff8a78; color-scheme:dark;
+  --void:#171b19; --unmade:#1f2421; --grid:#56605a; --draft:#ff8a5c; --danger:#ff8a78; color-scheme:dark;
 }
 html,body{height:100%}
 body{background:var(--bg);color:var(--fg);font-family:var(--f-body);font-size:1rem;line-height:1.4;overflow:hidden}
@@ -732,7 +732,7 @@ function paintMap(){
   ctx.setTransform(DPR*V.k,0,0,DPR*V.k,DPR*V.ox,DPR*V.oy);
   const unmade = css("--unmade"), grid = css("--grid"), accent = css("--accent-line"), sel = css("--sel"), ink = css("--line"), dcol = css("--draft"), surface = css("--surface"), fg = css("--fg");
   const px = hexPx(), lw = 1/V.k;
-  const gridA = px < 14 ? .12 : px < 34 ? .12 + .16*(px-14)/20 : .28;   // the empty grid is quiet, and quieter still zoomed out
+  const gridA = px < 14 ? 0 : px < 40 ? .2*(px-14)/26 : .2;   // the empty grid is faint, and gone when zoomed out
   patCache.size > 40 && patCache.clear();
   const [x0,y0] = toWorld(-30,-30), [x1,y1] = toWorld(W+30,H+30);
   const vis = (cx,cy) => cx>=x0 && cx<=x1 && cy>=y0 && cy<=y1;
