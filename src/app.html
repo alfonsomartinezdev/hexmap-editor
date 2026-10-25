@@ -740,8 +740,9 @@ function paintMap(){
     const [cx,cy] = center(c,r); if (!vis(cx,cy)) continue;
     const id = hid(c,r), d = view(id), L = d && landInfo(d.t);
     if (L){ roughHex(cx,cy,S*1.03,seedOf(c,r),.04);
-      if (px >= 14){ ctx.save(); ctx.scale(15/120, 15/120); ctx.fillStyle = landFill(L); ctx.fill(); ctx.restore(); }   // the path is already set, so the scale only sizes the hatching: one tile = 15 map units
-      else { ctx.fillStyle = flatOf(L.color); ctx.fill(); }
+      // zoomed in: one tile = 15 map units. Zoomed out: the same hatching drawn bigger (one tile spans a few hexes),
+      // so terrain still reads by its pattern instead of flattening to plain color
+      { const t = px >= 14 ? 15 : 15 * 14 / Math.max(px, 4); ctx.save(); ctx.scale(t/120, t/120); ctx.fillStyle = landFill(L); ctx.fill(); ctx.restore(); }
       if (px > 9){ ctx.strokeStyle = isDark() ? "rgba(243,240,230,.1)" : "rgba(20,20,20,.09)"; ctx.lineWidth = Math.max(lw, S*.025); ctx.lineJoin = "round"; ctx.stroke(); } }
     else { hexPath(cx,cy,S+.03); ctx.fillStyle = unmade; ctx.fill();
       if (px > 9){ roughHex(cx,cy,S*.97,seedOf(c,r),.05); ctx.strokeStyle = grid; ctx.lineWidth = lw; ctx.globalAlpha = gridA; ctx.stroke(); ctx.globalAlpha = 1; } }
