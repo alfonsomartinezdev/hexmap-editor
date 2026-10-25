@@ -48,6 +48,9 @@ walk(22, 23, [2,1,2,1,2,1,2,1,2,1,2,1,2,1,2,1,2,1,2,1,2,1,2,1]);   // a long riv
 const CUSTOM = [["c1","Salt flat","#e3edf3","rows"],["c2","Ashland","#4b4f58","dots"],["c3","Bloomfield","#b5677a","vertical"],["c4","Ice","#b8c4ba","bricks"],["c5","Moor","#6e5a8f","back"]];
 CUSTOM.forEach(([id], i) => { set(2 + i*2, 45, {t: "x-" + id}); set(3 + i*2, 45, {t: "x-" + id}); });
 
+// an empty patch in the middle, to see how unmade hexes look next to land
+for (let c = 8; c <= 19; c++) for (let r = 27; r <= 34; r++){ const h = get(c, r); if (h && !h.r) delete ch[`h${c}_${r}`]; }
+
 // split into posts by different players over three weeks, so Show and turns have something to show
 const ids = Object.keys(ch), players = [["u_c","Cal"],["u_b","Bea"],["u_d","Dev"],["u_e","Eli"]];
 const weeks = [new Date("2026-10-05T10:00:00-07:00").getTime(), new Date("2026-10-13T10:00:00-07:00").getTime(), new Date("2026-10-20T10:00:00-07:00").getTime()];
