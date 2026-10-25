@@ -297,9 +297,11 @@ canvas.nat,.rowbtn .rv canvas.nat,.opt canvas.nat{border:0;border-radius:0;backg
 (() => {
 /* ================= data ================= */
 const LAND = [ // broad terrain that fits any world; anything else is a custom land. Each has its own pen stroke.
-  ["desert","Desert","#dcc58a","dots"],["forest","Forest","#4a7a45","cross"],["hills","Hills","#b09a63","humps"],
-  ["mountains","Mountains","#82796e","zigzag"],["grassland","Plains","#a9bb6c","lines"],["sea","Water","#2f5d86","waves"],
-  ["swamp","Wetland","#61714d","dashes"]
+  // Colors differ in lightness as well as hue (pale sand, light grass, orange ochre, teal, clear blue, deep green,
+  // dusky slate), so the lands stay apart zoomed out and for colorblind players.
+  ["desert","Desert","#e9c46a","dots"],["forest","Forest","#2f6b3f","cross"],["hills","Hills","#c7834a","humps"],
+  ["mountains","Mountains","#6c6478","zigzag"],["grassland","Plains","#b3cc5f","lines"],["sea","Water","#2f6fb0","waves"],
+  ["swamp","Wetland","#4a8a7d","dashes"]
 ];
 // retired defaults: still drawn if already on the map, no longer offered
 const RETIRED = [["shallows","Shallows","#5f97bb","waves"],["river","River","#6aa6cf","waves"],["glacier","Glacier","#e3edf3","rows"],
@@ -316,8 +318,8 @@ const GLYPH_PEN = {waves:"waves", ripple:"waves", river:"waves", grass:"lines", 
 // symbols a custom nature can use (the old land symbols, freed up)
 const GLYPHS = [["waves","Waves"],["ripple","Ripple"],["grass","Grass"],["canopy","Tree"],["canopies","Trees"],["tuft","Reeds"],
   ["hill","Hill"],["peak","Peak"],["dots","Sand"],["dash","Frost"],["flake","Flake"],["cone","Volcano"]];
-const LAND_COLORS = [["Deep blue","#2f5d86"],["Blue","#4a8cbc"],["Teal","#2f8a7e"],["Green","#4a7a45"],["Dark green","#2d6a4f"],["Olive","#61714d"],
-  ["Sage","#a9bb6c"],["Sand","#dcc58a"],["Ochre","#b09a63"],["Stone","#82796e"],["Rust","#7a3b33"],["Frost","#b8c4ba"],["Snow","#e3edf3"],["Ash","#4b4f58"],["Violet","#6e5a8f"],["Rose","#b5677a"]];
+const LAND_COLORS = [["Deep blue","#2f6fb0"],["Blue","#4a8cbc"],["Teal","#2f8a7e"],["Green","#2f6b3f"],["Dark green","#2d6a4f"],["Olive","#4a8a7d"],
+  ["Sage","#b3cc5f"],["Sand","#e9c46a"],["Ochre","#c7834a"],["Stone","#6c6478"],["Rust","#7a3b33"],["Frost","#b8c4ba"],["Snow","#e3edf3"],["Ash","#4b4f58"],["Violet","#6e5a8f"],["Rose","#b5677a"]];
 function penFor(def){                                    // a custom land's pen: chosen, else from its old symbol, else from its name
   if (def.pen && PEN_KEYS.includes(def.pen)) return def.pen;
   if (def.pen && PEN_ALIAS[def.pen]) return PEN_ALIAS[def.pen];
