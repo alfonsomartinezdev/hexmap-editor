@@ -514,10 +514,12 @@ function hatchTile(color, pen, light){
   if (tileCache.has(key)) return tileCache.get(key);
   const N = 120, cv = document.createElement("canvas"); cv.width = cv.height = N;
   const c = cv.getContext("2d");
-  c.fillStyle = washOf(color); c.fillRect(0,0,N,N);
-  const ink = isDark() ? mixHex(color, "#f3f0e6", .22) : mixHex(color, "#141414", .22);
-  c.strokeStyle = c.fillStyle = light ? mixHex(ink, washOf(color), .45) : ink;
-  c.lineCap = "round"; c.lineWidth = light ? 2.2 : 4.2; c.globalAlpha = .9;
+  // no base color: plain paper, and all the color is in the pen strokes
+  const paper = isDark() ? "#1d2220" : "#f1f0ea";
+  c.fillStyle = paper; c.fillRect(0,0,N,N);
+  const ink = isDark() ? mixHex(color, "#f3f0e6", .1) : mixHex(color, "#141414", .12);
+  c.strokeStyle = c.fillStyle = ink;
+  c.lineCap = "round"; c.lineWidth = light ? 3.4 : 5.4; c.globalAlpha = 1;
   const diag = (dir, alpha) => { c.globalAlpha = alpha;                        // lines N apart share a wobble so the tile repeats
     for (let k = 0, i = -N; i < 2*N; i += 15, k++){ const j = wob(k % 8 + dir) * 3; c.beginPath();
       if (dir > 0){ c.moveTo(i, 0); c.quadraticCurveTo(i + N/2 + j, N/2 - j, i + N, N); }
