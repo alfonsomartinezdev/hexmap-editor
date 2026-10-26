@@ -51,9 +51,9 @@
     const path = decodeURIComponent(u.slice(ROOT.length).replace(/\.json$/, ""));
     const method = opts.method || "GET";
     const isPost = /^\/posts\/[^/]+$/.test(path) || (!old() && /^\/maps\/[^/]+\/posts\/[^/]+$/.test(path));
-    const isCurrent = !old() && path === "/current";
-    if (method === "GET") return (isCurrent || path === "/posts") ? new Response(JSON.stringify(clone(get(path)))) : deny();
-    if (method !== "PUT" || !(isPost || isCurrent)) return deny();
+    const isCurrent = !old() && path === "/current", isState = !old() && path === "/state";
+    if (method === "GET") return (isCurrent || isState || path === "/posts") ? new Response(JSON.stringify(clone(get(path)))) : deny();
+    if (method !== "PUT" || !(isPost || isCurrent || isState)) return deny();
     if (isPost && get(path)) return deny();
     const body = JSON.parse(opts.body);
     if (!body.at || (isPost && !body.by) || (isCurrent && !body.map)) return deny();
@@ -61,7 +61,7 @@
     const v = prune(body);
     set(path, v); changed(path);
     if (isPost) window.__fakeFirebase.writes.push({ id: path.split("/").pop(), path, body: clone(v) });
-    else window.__fakeFirebase.current.push(clone(v));
+    else if (isCurrent) window.__fakeFirebase.current.push(clone(v));
     return new Response(JSON.stringify(v), { status: 200 });
   };
 

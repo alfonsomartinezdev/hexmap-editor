@@ -215,3 +215,20 @@ test("posts already there when you open the map, and your own posts, don't annou
   await app.page.waitForTimeout(300);
   await expect(app.page.locator("#toast")).not.toContainText("published");
 });
+
+test("after I publish, the finished map is saved as the current state", async ({ app }) => {
+  await app.page.evaluate(() => {
+    localStorage.setItem("soc-name", "Ash");
+    window.__fakeFirebase.add("p0001", { by: "d_other", name: "Rowan", changes: { h18_26: { t: "hills", n: ["Deep"] } } });
+  });
+  await expect.poll(async () => (await app.view("h18_26") || {}).t).toBe("hills");
+  await app.setLand(16, 26, "Forest"); await app.done();
+  await publish(app);
+  const state = () => app.page.evaluate(() => fetch("https://test-map.firebaseio.com/state.json").then(r => r.json()).catch(() => null));
+  await expect.poll(async () => ((await state()) || {}).posts).toBe(2);
+  const s = await state();
+  expect(s.hexes.h16_26).toEqual({ col: 16, row: 26, land: "Forest" });
+  expect(s.hexes.h18_26).toEqual({ col: 18, row: 26, land: "Hills", natures: ["Deep"] });
+  expect(s.lastPost.by).toBe("Ash");
+  expect(s.turn).toMatch(/^First Age · Turn \d+$/);
+});

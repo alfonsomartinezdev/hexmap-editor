@@ -28,6 +28,11 @@
       ".read": true,
       ".write": true,
       ".validate": "newData.hasChildren(['map', 'at']) && newData.child('at').val() === now"
+    },
+    "state": {
+      ".read": true,
+      ".write": true,
+      ".validate": "newData.child('at').val() === now"
     }
   }
 }

@@ -1596,15 +1596,17 @@ async function savePost(){
   if (Object.keys(draftDefs.types).length) post.types = draftDefs.types;
   if (Object.keys(draftDefs.peoples).length) post.peoples = draftDefs.peoples;
   const btn = $("saveBtn"); if (btn) { btn.disabled = true; btn.textContent = "Publishing…"; }
+  stateDue = post.id;          // set first: the post can come back on the live stream before publish returns
   try { await backend.publish(post); }
-  catch(e){ if (btn){ btn.disabled=false; btn.textContent="Publish post"; } toast(e && e.code==="invalid_argument" ? "You can view this map but not change it." : "Couldn't publish. Your changes are kept; try again."); return; }
+  catch(e){ stateDue = null; if (btn){ btn.disabled=false; btn.textContent="Publish post"; } toast(e && e.code==="invalid_argument" ? "You can view this map but not change it." : "Couldn't publish. Your changes are kept; try again."); return; }
   draft.clear(); draftDefs = {types:{}, peoples:{}}; undoStack.length = 0; saveDraftLocal(); clearSelection(); renderDraftBar(); draw();
   toast("Published. Everyone can see it now."); say("Post published.");
 }
 async function publishWorld(world){
   if (backend && backend.needsName && !myName()) return withName(() => publishWorld(world));
-  try { await backend.publish(newPost({ changes: {}, world })); toast("Saved for everyone."); }
-  catch(e){ toast("Couldn't save that. Try again."); }
+  const post = newPost({ changes: {}, world }); stateDue = post.id;
+  try { await backend.publish(post); toast("Saved for everyone."); }
+  catch(e){ stateDue = null; toast("Couldn't save that. Try again."); }
 }
 function saveDraftLocal(){ lsSet("soc-draft", JSON.stringify([...draft])); lsSet("soc-defs", JSON.stringify(draftDefs)); }
 function loadDraftLocal(){
@@ -1946,6 +1948,26 @@ function announceNew(list){
   }
   toast(msg, draft.size ? 6000 : 4000); say(msg);
 }
+/* ---- the current state: after you publish, the finished map is saved in one place, so anyone (or any tool)
+   can read the map as it is now without replaying every post ---- */
+let stateDue = null;            // the id of my post whose state still needs saving
+function mapState(){
+  const color = c => (PALETTE.find(p => p[1] === c) || [c])[0];
+  const hexes = {};
+  for (const [id,h] of base){
+    const [c,r] = parse(id), o = {col:c, row:r};
+    if (h.t) o.land = (landInfo(h.t) || {}).name || h.t;
+    if (h.r) o.river = true;
+    if (h.p) o.people = (peoples.get(h.p) || {}).name || h.p;
+    if (h.n && h.n.length) o.natures = h.n;
+    if (h.m && h.m.length) o.markers = h.m.map(m => ({shape: (MARKERS[m.k] || ["Marker"])[0], color: color(m.color), ...(m.label ? {label: m.label} : {})}));
+    hexes[id] = o;
+  }
+  const last = posts[posts.length-1] || {}, t = nowTurn();
+  return { map: mapId || null, age: AGES[age][0], turn: `${AGES[t.age][0]} · Turn ${t.turn}`, posts: posts.length,
+    lastPost: {by: last.name || null, at: last.at || null},
+    peoples: Object.fromEntries([...peoples].map(([id,v]) => [v.name, {color: color(v.color)}])), hexes };
+}
 function onPosts(list){
   const pc = COLS, pr = ROWS;
   announceNew(list);
@@ -1958,6 +1980,7 @@ function onPosts(list){
   for (const [id,p] of [...draft]){ const b = base.get(id)||{}; for (const k of Object.keys(p)) if (same(b[k], p[k])) delete p[k]; if (!Object.keys(p).length) draft.delete(id); }
   if (histIdx !== null){ if (histIdx >= posts.length) showHistory(null); else histState = fold(posts.slice(0,histIdx+1)); }
   renderDraftBar(); renderSheet(); draw();
+  if (stateDue && posts.some(p => p.id === stateDue)){ stateDue = null; if (backend && backend.saveState) backend.saveState(mapState()).catch(() => {}); }
 }
 const localBackend = () => ({
   kind:"local", needsName:false,
@@ -2011,9 +2034,11 @@ function firebaseBackend(cfg){
       const r = await put(`${postsPath()}/${encodeURIComponent(id)}`, body);
       if (!r.ok) throw new Error("publish failed: " + r.status);
     },
+    async saveState(state){ await put("/state", state); },
     async newMap(seed){
       if (!maps) throw {code:"rules"};
       const map = "m" + Date.now().toString(36) + rid().slice(0,4), {id, ...body} = seed;
+      stateDue = id;
       let r = await put(`/maps/${map}/posts/${encodeURIComponent(id)}`, body);
       if (!r.ok) throw r.status === 401 ? {code:"rules"} : new Error("seed failed");
       r = await put("/current", { map, by: seed.by });
@@ -2047,6 +2072,7 @@ async function claudeBackend(cl){
       db.doc("world/meta").onSnapshot(s => { if (s.exists){ applyDefs([{world: s.data()}]); applyDefs(posts.filter(p => p.world)); renderAge(); fit(); } });
     },
     async publish(post){ const {id, ...body} = post; await db.doc((this.path ? this.path() : "posts") + "/" + id).set({...body, at: Date.now()}); },
+    async saveState(state){ await db.doc("world/state").set({...state, at: Date.now()}); },
     async newMap(seed){
       const map = "m" + Date.now().toString(36) + rid().slice(0,4), {id, ...body} = seed;
       await db.doc(`maps/${map}/posts/${id}`).set({...body, at: Date.now()});
