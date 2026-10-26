@@ -866,17 +866,17 @@ function paintMap(){
   }
   // natures in ink along the bottom of the hex; markers as pieces in the middle
   for (const [c,r,cx,cy,d,L] of cells){
-    const nat = d.n || [], paper = L ? washOf(L.color) : unmade;
-    if (nat.length){
-      if (px >= 30){
-        const show = nat.length > 3 ? nat.slice(0,2) : nat, n = show.length + (nat.length > 3 ? 1 : 0), gap = nat.length > 3 ? S*.44 : S*.5, ns = S*.38, y = cy + S*.58;
-        show.forEach((nm,i) => drawNature(ctx, nm, cx + (i-(n-1)/2)*gap, y, ns, ink, paper));
-        if (nat.length > 3){ const x = cx + (n-1)/2*gap; ctx.font = `700 ${S*.26}px "Space Mono", monospace`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
-          ctx.lineWidth = S*.1; ctx.strokeStyle = paper; ctx.strokeText(`+${nat.length-2}`, x, y); ctx.fillStyle = ink; ctx.fillText(`+${nat.length-2}`, x, y); }
-      } else if (px >= 18){                         // zoomed out: just the first nature, a little bigger, so it can still be read
-        drawNature(ctx, nat[0], cx, cy + S*.42, S*.5, ink, paper);
-      }
-    }
+    const nat = d.n || [];
+    // natures sit on a little paper badge so they read clearly against any hatching
+    const badge = (show, more, ns, gap, y) => {
+      const n = show.length + (more ? 1 : 0), w = n*gap + S*.1, h = ns*1.35;
+      ctx.beginPath(); ctx.roundRect ? ctx.roundRect(cx - w/2, y - h/2, w, h, h/2) : ctx.rect(cx - w/2, y - h/2, w, h);
+      ctx.fillStyle = surface; ctx.fill(); ctx.lineWidth = Math.max(lw, S*.035); ctx.strokeStyle = ink; ctx.stroke();
+      show.forEach((nm,i) => drawNature(ctx, nm, cx + (i-(n-1)/2)*gap, y, ns, ink, surface));
+      if (more){ ctx.font = `700 ${ns*.7}px "Space Mono", monospace`; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillStyle = ink; ctx.fillText(`+${more}`, cx + (n-1)/2*gap, y); }
+    };
+    if (nat.length && px >= 30) badge(nat.length > 3 ? nat.slice(0,2) : nat, nat.length > 3 ? nat.length-2 : 0, S*.34, S*.42, cy + S*.56);
+    else if (nat.length && px >= 18) badge(nat.slice(0,1), 0, S*.44, S*.54, cy + S*.42);   // zoomed out: just the first nature, a little bigger
     const ms = d.m || []; if (!ms.length) continue;
     const over = ms.length > 4, k = over ? 4 : ms.length, spots = MARKER_SPOTS[k], r0 = S*MARKER_R[k];
     ms.slice(0, over ? 3 : 4).forEach((m,i) => marker(MARKERS[m.k] ? MARKERS[m.k][1] : "dot", cx + spots[i][0]*S, cy + spots[i][1]*S, r0, m.color || "#e6c440", ink, seedOfId(m.id)));

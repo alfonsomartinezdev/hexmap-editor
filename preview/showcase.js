@@ -48,6 +48,11 @@ walk(22, 23, [2,1,2,1,2,1,2,1,2,1,2,1,2,1,2,1,2,1,2,1,2,1,2,1]);   // a long riv
 const CUSTOM = [["c1","Salt flat","#e3edf3","rows"],["c2","Ashland","#4b4f58","dots"],["c3","Bloomfield","#b5677a","vertical"],["c4","Ice","#b8c4ba","bricks"],["c5","Moor","#6e5a8f","back"]];
 CUSTOM.forEach(([id], i) => { set(2 + i*2, 45, {t: "x-" + id}); set(3 + i*2, 45, {t: "x-" + id}); });
 
+// a lake where some hexes are Deep and others Deep + Quickening, to compare how natures read
+for (const [c,r] of [[24,38],[25,38],[26,38],[23,39],[24,39],[25,39],[26,39],[24,40],[25,40],[26,40],[23,41],[24,41],[25,41]]) set(c, r, {t: "sea", p: undefined, n: c >= 25 && r >= 40 ? ["Deep","Quickening"] : ["Deep"]});
+for (const [c,r] of [[5,38],[6,38],[5,39],[6,39],[7,39],[5,40],[6,40]]) set(c, r, {n: ["Teeming"]});
+for (const [c,r] of [[17,37],[18,37],[17,38],[18,38]]) set(c, r, {n: ["Skyward","Frozen","Still","Wild"]});
+
 // an empty patch in the middle, to see how unmade hexes look next to land
 for (let c = 8; c <= 19; c++) for (let r = 27; r <= 34; r++){ const h = get(c, r); if (h && !h.r) delete ch[`h${c}_${r}`]; }
 
