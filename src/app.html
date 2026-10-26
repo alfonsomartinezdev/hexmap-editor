@@ -1566,7 +1566,7 @@ function renderDraftBar(){
       el("button",{type:"button", class:"btn", onclick:()=>{ confirmDiscard=false; renderDraftBar(); }}, "Keep"));
     return;
   }
-  bar.append(el("span",{class:"what"}, el("span",{class:"dot","aria-hidden":"true"}), "Changes not published yet"),
+  bar.append(el("span",{class:"what"}, el("span",{class:"dot","aria-hidden":"true"}), n ? `${n} ${n === 1 ? "hex" : "hexes"} changed, not published` : "Border colors changed, not published"),
     el("button",{type:"button", class:"btn", disabled: !undoStack.length || null, onclick:undo}, "Undo"),
     el("button",{type:"button", class:"btn", onclick:()=>{ confirmDiscard=true; renderDraftBar(); }}, "Start over"),
     el("span",{class:"grow"}),
