@@ -28,7 +28,7 @@ test.describe("drafts", () => {
     await app.setLand(18, 26, "Hills"); await app.done();
     const bar = app.page.locator("#draftBar");
     await bar.getByRole("button", { name: "Start over" }).click();
-    await expect(bar).toContainText("Start over? This clears your 2 changes.");
+    await expect(bar).toContainText("Start over? This clears your changes.");
     await bar.getByRole("button", { name: "Keep" }).click();
     expect(Object.keys((await app.state()).draft)).toHaveLength(2);
     await bar.getByRole("button", { name: "Start over" }).click();
@@ -41,6 +41,37 @@ test.describe("drafts", () => {
     await app.setLand(16, 26, "Forest"); await app.done();
     await app.page.reload(); await app.page.waitForFunction(() => window.__soc);
     expect((await app.state()).draft).toHaveProperty("h16_26");
+  });
+});
+
+test.describe("steps", () => {
+  test.beforeEach(async ({ app }) => {
+    await app.open({ mock: { userId: "u_me" } });
+    await app.page.locator("#menuBtn").click();                       // steps are opt-in from the menu
+    await app.page.getByRole("switch", { name: "Steps (try it)" }).click();
+    await app.page.locator("#mClose").click();
+    await app.zoomIn();
+  });
+  const bar = app => app.page.locator("#draftBar");
+
+  test("a draft can be split into steps, stepped back through, and published with them", async ({ app }) => {
+    await app.setLand(16, 26, "Forest"); await app.done();
+    await bar(app).getByRole("button", { name: "+ Step" }).click();          // step 1 has changes: a new step, then its power
+    await app.page.locator("#mBody").getByRole("button", { name: "Shape Climate", exact: true }).click();
+    await expect(bar(app)).toContainText("Step 2 of 2 · Shape Climate");
+    await app.setLand(18, 26, "Hills"); await app.done();
+    await expect(bar(app)).toContainText("1 hex of 19 in this step · 2 in all");
+    // back to step 1: step 2's hex is hidden until you come forward again
+    await bar(app).getByRole("button", { name: "Previous step" }).click();
+    await expect(bar(app)).toContainText("later steps hidden");
+    expect(await app.view("h18_26")).toBeNull();
+    await bar(app).getByRole("button", { name: "Next step" }).click();
+    expect((await app.view("h18_26")).t).toBe("hills");
+    await app.page.locator("#saveBtn").click();
+    await expect(bar(app)).toBeHidden();
+    const [post] = await app.page.evaluate(() => Object.entries(window.__mockStore.all()).filter(([k]) => k.startsWith("posts/")).map(([, v]) => v));
+    expect(post.changes).toMatchObject({ h16_26: { t: "forest" }, h18_26: { t: "hills" } });
+    expect(post.steps).toEqual([{ power: "", hexes: ["h16_26"] }, { power: "Shape Climate", hexes: ["h18_26"] }]);
   });
 });
 

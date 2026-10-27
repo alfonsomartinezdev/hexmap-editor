@@ -135,9 +135,16 @@ canvas{display:block;width:100%;height:100%;touch-action:none;-webkit-touch-call
 .movebar span{flex:1;min-width:0}
 .movebar button{min-height:40px;padding:0 12px;border-radius:8px;border:0;background:var(--bg);color:var(--fg);font-weight:700;cursor:pointer}
 
-.draftbar{min-width:0;display:flex;align-items:center;gap:8px;padding:10px 16px;border-top:1px solid var(--line);flex-wrap:wrap}
+.draftbar{min-width:0;display:flex;align-items:center;gap:6px;padding:10px 16px;border-top:1px solid var(--line);flex-wrap:wrap}
 .draftbar .what{flex:1 1 100%;min-width:0;font-weight:700;font-size:.9rem}
 .draftbar .what small{display:block;font-weight:400;color:var(--muted);font-size:.8rem}
+.steprow{flex:1 1 100%;display:flex;align-items:center;gap:6px;min-width:0}
+.steprow .btn.icon{min-width:44px;padding:0;font-size:1.3rem}
+.stepname{flex:1;min-width:0;text-align:left;background:none;border:0;color:inherit;font:inherit;padding:4px 2px;cursor:pointer}
+.stepname strong{display:block;font-size:.95rem}
+.stepname small{display:block;color:var(--muted);font-size:.8rem}
+.draftbar > .btn{padding:0 10px}
+.stepwarn{flex:1 1 100%;margin:0;font-size:.85rem;font-weight:700}
 .dot{display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--draft);margin-right:6px;vertical-align:middle}
 
 .modal{position:fixed;inset:0;background:rgba(10,13,22,.45);display:flex;align-items:flex-end;justify-content:center;z-index:20}
@@ -414,16 +421,53 @@ function applyDefs(list){
 }
 const same = (a,b) => JSON.stringify(a??null) === JSON.stringify(b??null);
 function view(id){ return histIdx!==null ? (histState.get(id)||null) : merge(base.get(id), draft.get(id)); }
+/* ---- steps: a draft is a list of steps, each one use of a power (Shape Land, Shape Climate…).
+   The map shows your steps up to the one you're on, so you can step back and forth before you publish.
+   Where two steps change the same hex, the later one wins. `draft` is always the combined patch up to the current step. ---- */
+const POWERS = [["Land", ["Shape Land","Shape Climate","Rouse"]],
+  ["Peoples and cities", ["Create Ancestry","Create Heritage","Settle","Found City","Build","Raise Army","March Army","Treat"]],
+  ["Legends", ["Create Legend","Resurrect Legend","Perform Deed"]],
+  ["Fate", ["Exalt","Align","Event","Catastrophe"]]];
+const AREA_POWERS = new Set(["Shape Land","Shape Climate","Catastrophe"]);   // one use covers up to one area
+const emptyStep = () => ({power:null, ch:{}});
+// steps are opt-in from the menu for now; with them off the draft is one step and the bar is the plain one
+const stepsOn = () => lsGet("soc-steps-on") === "1";
+let steps = [emptyStep()], cur = 0;
+const stepSize = st => Object.keys(st.ch).length;
+function patchUpTo(id, n){ let p = null; for (let i = 0; i < n; i++){ const q = steps[i].ch[id]; if (q) p = Object.assign(p || {}, q); } return p; }
+function combine(n){                 // hex -> patch against the published map, from steps 0..n-1
+  const out = new Map(), ids = new Set(); for (let i = 0; i < n; i++) for (const id of Object.keys(steps[i].ch)) ids.add(id);
+  for (const id of ids){ const p = patchUpTo(id, n), b = base.get(id) || {}; for (const k of Object.keys(p)) if (same(b[k], p[k])) delete p[k]; if (Object.keys(p).length) out.set(id, p); }
+  return out;
+}
+function rebuildDraft(){ draft.clear(); for (const [k,v] of combine(cur + 1)) draft.set(k, v); }
+const hasSteps = () => steps.some(st => stepSize(st)) || steps.length > 1;
 function setField(id, field, value){
   if (Array.isArray(value) && !value.length) value = null;
-  const b = base.get(id) || {}, p = {...(draft.get(id)||{})};
-  if (same(b[field], value)) delete p[field]; else p[field] = value;
-  if (Object.keys(p).length) draft.set(id,p); else draft.delete(id);
+  const before = merge(base.get(id), patchUpTo(id, cur)) || {}, ch = steps[cur].ch, p = {...(ch[id] || {})};
+  if (same(before[field], value)) delete p[field]; else p[field] = value;
+  if (Object.keys(p).length) ch[id] = p; else delete ch[id];
+  rebuildDraft();
 }
-function snapshot(){ undoStack.push(JSON.stringify([...draft])); if (undoStack.length > 60) undoStack.shift(); }
+function goStep(i){ cur = Math.max(0, Math.min(steps.length - 1, i)); rebuildDraft(); saveDraftLocal(); renderDraftBar(); renderSheet(); draw(); say(`Step ${cur+1} of ${steps.length}${steps[cur].power ? ", " + steps[cur].power : ""}.`); }
+function newStep(){
+  if (stepSize(steps[cur])) { snapshot(); steps.splice(cur + 1, 0, emptyStep()); cur++; rebuildDraft(); afterEdit(); }
+  pickPower();
+}
+function pickPower(){
+  const st = steps[cur], set = pw => { snapshot(); st.power = pw; closeModal(); afterEdit(); };
+  const body = [];
+  for (const [group, list] of POWERS) body.push(el("p",{class:"sub"}, group), el("div",{class:"chips"}, list.map(pw => el("button",{type:"button", class:"chip", style:"padding-right:12px", "aria-pressed": String(st.power === pw), onclick:() => set(pw)}, pw))));
+  body.push(el("div",{class:"row", style:"margin-top:12px"},
+    el("button",{type:"button", class:"btn", onclick:() => set(null)}, "No power"),
+    steps.length > 1 ? el("button",{type:"button", class:"btn danger", onclick:() => { snapshot(); steps.splice(cur, 1); cur = Math.min(cur, steps.length - 1); rebuildDraft(); closeModal(); afterEdit(); toast("Step deleted."); }}, "Delete this step") : null));
+  openModal(`Step ${cur+1}: which power?`, body);
+}
+function clearSteps(){ steps = [emptyStep()]; cur = 0; draft.clear(); }
+function snapshot(){ undoStack.push(JSON.stringify({steps, cur})); if (undoStack.length > 60) undoStack.shift(); }
 function undo(){
   if (!undoStack.length) return;
-  const prev = JSON.parse(undoStack.pop()); draft.clear(); for (const [k,v] of prev) draft.set(k,v);
+  const prev = JSON.parse(undoStack.pop()); steps = prev.steps; cur = prev.cur; rebuildDraft();
   sheetForm = null; afterEdit(); toast("Undone."); say("Undone.");
 }
 function afterEdit(){ saveDraftLocal(); renderDraftBar(); renderSheet(); draw(); }
@@ -726,7 +770,7 @@ function paint(){
   catch(e){ console.error("paint failed", e); try { ctx.restore(); } catch(_){} }
 }
 // unpublished hexes and the ones being edited are drawn in pencil, not ink
-const pencilled = id => draft.has(id) || selection.has(id);
+const pencilled = id => (stepsOn() ? id in steps[cur].ch : draft.has(id)) || selection.has(id);
 function paintMap(){
   clampView();
   ctx.setTransform(DPR,0,0,DPR,0,0); ctx.fillStyle = css("--void"); ctx.fillRect(0,0,W,H);
@@ -909,7 +953,7 @@ function paintMap(){
     // unpublished changes: a faint pencil outline, sketched but not inked yet
     // the edges of unpublished hexes, and any coastline they touch, are pencilled in place of the ink
     if (draft.size || selection.size){
-      const P = new Set([...draft.keys(), ...selection]);
+      const P = new Set([...(stepsOn() ? Object.keys(steps[cur].ch) : draft.keys()), ...selection]);
       ctx.beginPath();
       for (const id of P){
         const [c,r] = parse(id); if (!inB(c,r)) continue; const [cx,cy] = center(c,r); if (!vis(cx,cy)) continue; const d = view(id) || {};
@@ -1557,20 +1601,36 @@ function moveMarkerTo(to){
 /* ================= draft bar + saving ================= */
 let confirmDiscard = false;
 function renderDraftBar(){
-  const bar = $("draftBar"), n = draft.size, rc = pendingRecolors();
-  bar.hidden = !(n || rc) || histIdx !== null || selection.size > 0 || regrouping; bar.textContent = "";
-  if (!n && !rc) { confirmDiscard = false; return; }
+  const bar = $("draftBar"), rc = pendingRecolors(), all = combine(steps.length).size;
+  bar.hidden = !(hasSteps() || rc) || histIdx !== null || selection.size > 0 || regrouping; bar.textContent = "";
+  if (!hasSteps() && !rc) { confirmDiscard = false; return; }
+  const undoBtn = el("button",{type:"button", class:"btn", disabled: !undoStack.length || null, onclick:undo}, "Undo"),
+    overBtn = el("button",{type:"button", class:"btn", onclick:()=>{ confirmDiscard=true; renderDraftBar(); }}, "Start over"),
+    publishBtn = label => el("button",{type:"button", class:"btn primary", id:"saveBtn", onclick:savePost}, label);
+  if (!stepsOn() && !confirmDiscard){
+    bar.append(el("span",{class:"what"}, el("span",{class:"dot","aria-hidden":"true"}), all ? `${all} ${all === 1 ? "hex" : "hexes"} changed, not published` : "Border colors changed, not published"),
+      undoBtn, overBtn, el("span",{class:"grow"}), publishBtn("Publish post"));
+    return;
+  }
   if (confirmDiscard){
-    bar.append(el("span",{class:"what"}, `Start over? This clears your ${n + rc} ${n + rc===1?"change":"changes"}.`),
-      el("button",{type:"button", class:"btn danger", onclick:()=>{ draft.clear(); draftDefs = {types:{}, peoples:{}}; rebuildDefs(); undoStack.length = 0; confirmDiscard=false; saveDraftLocal(); renderDraftBar(); renderSheet(); draw(); toast("Cleared. Your post is empty again."); }}, "Start over"),
+    bar.append(el("span",{class:"what"}, `Start over? This clears ${steps.length > 1 ? `all ${steps.length} steps` : "your changes"}.`),
+      el("button",{type:"button", class:"btn danger", onclick:()=>{ clearSteps(); draftDefs = {types:{}, peoples:{}}; rebuildDefs(); undoStack.length = 0; confirmDiscard=false; saveDraftLocal(); renderDraftBar(); renderSheet(); draw(); toast("Cleared. Your post is empty again."); }}, "Start over"),
       el("button",{type:"button", class:"btn", onclick:()=>{ confirmDiscard=false; renderDraftBar(); }}, "Keep"));
     return;
   }
-  bar.append(el("span",{class:"what"}, el("span",{class:"dot","aria-hidden":"true"}), n ? `${n} ${n === 1 ? "hex" : "hexes"} changed, not published` : "Border colors changed, not published"),
-    el("button",{type:"button", class:"btn", disabled: !undoStack.length || null, onclick:undo}, "Undo"),
-    el("button",{type:"button", class:"btn", onclick:()=>{ confirmDiscard=true; renderDraftBar(); }}, "Start over"),
-    el("span",{class:"grow"}),
-    el("button",{type:"button", class:"btn primary", id:"saveBtn", onclick:savePost}, "Publish post"));
+  const st = steps[cur], n = stepSize(st), area = AGES[age][1], over = AREA_POWERS.has(st.power) && n > area;
+  const sub = [`${n} ${n === 1 ? "hex" : "hexes"}${AREA_POWERS.has(st.power) ? ` of ${area}` : ""} in this step`];
+  if (steps.length > 1) sub.push(`${all} in all`);
+  if (cur < steps.length - 1) sub.push("later steps hidden");
+  bar.append(...[
+    el("div",{class:"steprow"},
+      el("button",{type:"button", class:"btn icon", "aria-label":"Previous step", disabled: cur === 0 || null, onclick:() => goStep(cur - 1)}, "‹"),
+      el("button",{type:"button", class:"stepname", onclick:pickPower},
+        el("strong",{}, el("span",{class:"dot","aria-hidden":"true"}), `Step ${cur+1} of ${steps.length} · `, st.power || "Choose power", " ▾"),
+        el("small",{}, rc && !all ? "Border colors changed" : sub.join(" · "))),
+      el("button",{type:"button", class:"btn icon", "aria-label":"Next step", disabled: cur === steps.length - 1 || null, onclick:() => goStep(cur + 1)}, "›")),
+    over ? el("p",{class:"stepwarn", role:"status"}, `⚠ ${n} hexes is more than one area (${area}) for ${st.power}.`) : null,
+    el("button",{type:"button", class:"btn", onclick:newStep}, "+ Step"), undoBtn, overBtn, el("span",{class:"grow"}), publishBtn("Publish")].filter(Boolean));
 }
 function newPost(extra){
   return Object.assign({ id: "p" + Date.now().toString(36) + rid().slice(0,4), by: myId || deviceId, name: myName() || null }, extra);
@@ -1590,16 +1650,19 @@ function askName(then){
   openModal("Who's posting?", body);
 }
 async function savePost(){
-  if (!draft.size && !pendingRecolors()) return;
+  const all = combine(steps.length);
+  if (!all.size && !pendingRecolors()) return;
   if (backend && backend.needsName && !myName()) return withName(savePost);
-  const post = newPost({ changes: wire(Object.fromEntries(draft)) });
+  const post = newPost({ changes: wire(Object.fromEntries(all)) });
+  const used = steps.filter(stepSize).map(st => ({ power: st.power || "", hexes: Object.keys(st.ch) }));
+  if (used.length && stepsOn()) post.steps = used;
   if (Object.keys(draftDefs.types).length) post.types = draftDefs.types;
   if (Object.keys(draftDefs.peoples).length) post.peoples = draftDefs.peoples;
   const btn = $("saveBtn"); if (btn) { btn.disabled = true; btn.textContent = "Publishing…"; }
   stateDue = post.id;          // set first: the post can come back on the live stream before publish returns
   try { await backend.publish(post); }
-  catch(e){ stateDue = null; if (btn){ btn.disabled=false; btn.textContent="Publish post"; } toast(e && e.code==="invalid_argument" ? "You can view this map but not change it." : "Couldn't publish. Your changes are kept; try again."); return; }
-  draft.clear(); draftDefs = {types:{}, peoples:{}}; undoStack.length = 0; saveDraftLocal(); clearSelection(); renderDraftBar(); draw();
+  catch(e){ stateDue = null; if (btn){ btn.disabled=false; btn.textContent = stepsOn() ? "Publish" : "Publish post"; } toast(e && e.code==="invalid_argument" ? "You can view this map but not change it." : "Couldn't publish. Your changes are kept; try again."); return; }
+  clearSteps(); draftDefs = {types:{}, peoples:{}}; undoStack.length = 0; saveDraftLocal(); clearSelection(); renderDraftBar(); draw();
   toast("Published. Everyone can see it now."); say("Post published.");
 }
 async function publishWorld(world){
@@ -1608,9 +1671,12 @@ async function publishWorld(world){
   try { await backend.publish(post); toast("Saved for everyone."); }
   catch(e){ stateDue = null; toast("Couldn't save that. Try again."); }
 }
-function saveDraftLocal(){ lsSet("soc-draft", JSON.stringify([...draft])); lsSet("soc-defs", JSON.stringify(draftDefs)); }
+function saveDraftLocal(){ lsSet("soc-steps", JSON.stringify({steps, cur})); lsSet("soc-defs", JSON.stringify(draftDefs)); }
 function loadDraftLocal(){
-  try { const v = JSON.parse(lsGet("soc-draft")||"[]"); for (const [k,p] of v) draft.set(k,p); } catch(e){}
+  try { const v = JSON.parse(lsGet("soc-steps")||"null"); if (v && v.steps && v.steps.length){ steps = v.steps; cur = Math.min(v.cur || 0, steps.length - 1); } } catch(e){}
+  try { const old = JSON.parse(lsGet("soc-draft")||"[]"); if (old.length && !hasSteps()) steps[0].ch = Object.fromEntries(old); localStorage.removeItem("soc-draft"); } catch(e){}
+  if (!stepsOn()) cur = steps.length - 1;
+  rebuildDraft();
   try { const d = JSON.parse(lsGet("soc-defs")||"null"); if (d && d.types && d.peoples) draftDefs = d; } catch(e){}
   applyDefs([draftDefs]);
 }
@@ -1841,6 +1907,8 @@ function switchRow(label, get, set){
   return b;
 }
 const themeToggle = () => switchRow("Dark mode", isDark, on => setTheme(on ? "dark" : "light"));
+// turning steps off shows every step again and keeps them; new changes go on the last one
+const stepsToggle = () => switchRow("Steps (try it)", stepsOn, on => { lsSet("soc-steps-on", on ? "1" : "0"); if (!on) cur = steps.length - 1; rebuildDraft(); saveDraftLocal(); renderDraftBar(); draw(); });
 // rulers are on unless this device turned them off
 // rulers are switched off for now; set RULERS_AVAILABLE to bring back the menu switch
 const RULERS_AVAILABLE = false;
@@ -1881,6 +1949,7 @@ $("menuBtn").onclick = () => {
   openModal("Menu", [
     RULERS_AVAILABLE ? rulersToggle() : null,
     themeToggle(),
+    stepsToggle(),
     item("History", posts.length ? `${posts.length} published ${posts.length===1?"post":"posts"}` : "No posts yet", openHistory),
     window.RULES_MD ? item("Rules", "How to play Songs of Creation", openRules) : null,
     item("Key", "What the colors and symbols mean", openKey),
@@ -1923,7 +1992,7 @@ function onMap(id){
   lsSet("soc-map", id);
   if (first && (was === null || was === id)) return;            // same map as last time: keep the draft
   const lost = draft.size;
-  draft.clear(); draftDefs = {types:{}, peoples:{}}; undoStack.length = 0; saveDraftLocal();
+  clearSteps(); draftDefs = {types:{}, peoples:{}}; undoStack.length = 0; saveDraftLocal();
   posts = []; base = new Map(); customLand.clear(); customNat.clear(); peoples.clear(); age = 1;
   if (histIdx !== null) showHistory(null);
   if (highlight) setHighlight(null);
@@ -1977,7 +2046,7 @@ function onPosts(list){
   base = fold(posts);
   if (highlight) applyFilter(true);
   // drop draft fields that now match the shared map
-  for (const [id,p] of [...draft]){ const b = base.get(id)||{}; for (const k of Object.keys(p)) if (same(b[k], p[k])) delete p[k]; if (!Object.keys(p).length) draft.delete(id); }
+  rebuildDraft();
   if (histIdx !== null){ if (histIdx >= posts.length) showHistory(null); else histState = fold(posts.slice(0,histIdx+1)); }
   renderDraftBar(); renderSheet(); draw();
   if (stateDue && posts.some(p => p.id === stateDue)){ stateDue = null; if (backend && backend.saveState) backend.saveState(mapState()).catch(() => {}); }

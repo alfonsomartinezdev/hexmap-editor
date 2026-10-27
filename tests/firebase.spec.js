@@ -129,7 +129,7 @@ test("a people's border color can be changed, and the change is published", asyn
   await app.page.getByRole("button", { name: "Goblins: change border color" }).click();
   await app.page.getByRole("button", { name: "Indigo", exact: true }).click();
   await app.page.getByRole("button", { name: "Save color" }).click();
-  await expect(app.page.locator("#draftBar")).toContainText("Border colors changed, not published");
+  await expect(app.page.locator("#draftBar")).toContainText("Border colors changed");
   await publish(app);
   await expect.poll(async () => (await writes(app)).length).toBe(1);
   const [w] = await writes(app);
