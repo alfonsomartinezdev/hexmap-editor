@@ -77,10 +77,10 @@ test.describe("powers first", () => {
     expect((await app.view("h16_26")).n).toEqual(["Deep"]);
     await app.footer("Done").click();
     await expect(bar(app)).toContainText("Shape ClimateStep 2 of 2");
-    // stepping back hides the later step until you come forward again
+    // going back to step 1 still shows everything
     await bar(app).getByRole("button", { name: "Previous step" }).click();
-    await expect(bar(app)).toContainText("later steps hidden");
-    expect((await app.view("h16_26")).n).toBeUndefined();
+    await expect(bar(app)).toContainText("Shape LandStep 1 of 2");
+    expect((await app.view("h16_26")).n).toEqual(["Deep"]);
     // carry on with step 1: add a hex to it, and Undo only takes back what's in that step
     await bar(app).getByRole("button", { name: "Edit step" }).click();
     await app.button("Forest").click(); await app.tapHex(18, 26);
@@ -102,16 +102,16 @@ test.describe("powers first", () => {
     await usePower(app, "Create Ancestry");
     await app.page.locator("#otherName").fill("Elves");
     await app.page.locator("#mBody").getByRole("button", { name: "Next" }).click();
-    await expect(app.page.locator("#sheet")).toContainText("Tap the hex where the Elves begin");
+    await expect(app.page.locator("#sheet")).toContainText("Tap where the Elves begin");
     await app.tapHex(14, 26);                              // one tap spreads over the connected plains
     await expect(app.page.locator("#sheet")).toContainText("5 of 19");
     await app.tapHex(17, 26); await app.tapHex(18, 26);     // then hexes can be taken off (or added)
     expect((await app.view("h18_26")).p).toBeUndefined();
     await app.footer("Done").click();
-    await expect(app.page.locator("#mTitle")).toHaveText("Legends arise");
-    await app.page.locator("#mBody").getByRole("button", { name: "Not now" }).click();
+    await expect(app.page.locator("#mTitle")).toHaveText("Legends of the Elves?");
+    await app.page.locator("#mBody").getByRole("button", { name: "Skip" }).click();
     await usePower(app, "Settle");                          // the only people is picked already
-    await expect(app.page.locator("#sheet")).toContainText("Tap a lit hex to settle the Elves there");
+    await expect(app.page.locator("#sheet")).toContainText("Tap a hex next to them");
     await app.tapHex(17, 26);                              // spreads over the plains they don't live in yet
     expect((await app.view("h17_26")).p).toBe((await app.view("h15_26")).p);
     expect((await app.view("h18_26")).p).toBe((await app.view("h15_26")).p);
@@ -131,10 +131,10 @@ test.describe("powers first", () => {
     await app.tapHex(14, 26); await app.footer("Done").click();
     await app.page.locator("#mBody").getByRole("button", { name: "Add a legend" }).click();   // a legend arises for each player who paid
     await app.page.locator("#alignedTo").fill("Ash"); await name("The First Mother");
-    await app.page.locator("#mBody").getByRole("button", { name: "That's all" }).click();
+    await app.page.locator("#mBody").getByRole("button", { name: "Done" }).click();
     expect(Object.values(await app.page.evaluate(() => window.__soc.state().draft)).flatMap(p => p.m || [])).toEqual([expect.objectContaining({ k: "legend", label: "The First Mother", aligned: "Ash" })]);
     await usePower(app, "Found City");
-    await expect(app.page.locator("#sheet")).toContainText("where the Elves live");
+    await expect(app.page.locator("#sheet")).toContainText("Tap a hex for the city");
     await app.tapHex(15, 26); await name("Vgd");
     expect(await things("h15_26")).toContainEqual(expect.objectContaining({ k: "city", label: "Vgd" }));
     await expect(bar(app)).toContainText("Found City");
@@ -152,18 +152,18 @@ test.describe("powers first", () => {
     await expect(bar(app)).toContainText("Create Legend · The Grey CompanyStep 7 of 7");
     await expect(bar(app)).toContainText("The Grey Company");
     // Catastrophe: the army is crossed out, not removed
-    await usePower(app, "Catastrophe"); await app.button("Destroy a city, army or legend").click();
+    await usePower(app, "Catastrophe"); await app.button("Destroy").click();
     await app.tapHex(17, 26);
     expect((await things("h17_26"))[0]).toMatchObject({ label: "The Host", x: true });
     await app.button("Wipe land").click(); await app.tapHex(16, 26);
     expect((await app.view("h16_26")).t).toBeUndefined();
     await app.footer("Done").click();
     // Exalt: one place, or the whole land form
-    await usePower(app, "Exalt"); await app.page.locator("#mBody").getByRole("button", { name: "The whole land form" }).click();
+    await usePower(app, "Exalt"); await app.page.locator("#mBody").getByRole("button", { name: "Whole land form" }).click();
     await app.tapHex(14, 26); await name("The Long Meadow");
     expect((await app.view("h14_26")).w).toBe("The Long Meadow");
     expect((await app.view("h15_26")).w).toBe("The Long Meadow");
-    await usePower(app, "Exalt"); await app.page.locator("#mBody").getByRole("button", { name: "One place in it" }).click();
+    await usePower(app, "Exalt"); await app.page.locator("#mBody").getByRole("button", { name: "One hex" }).click();
     await app.tapHex(17, 26); await name("The World Tree");
     expect((await things("h17_26")).map(m => m.k)).toEqual(["army", "wonder"]);
   });
