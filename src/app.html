@@ -144,6 +144,13 @@ canvas{display:block;width:100%;height:100%;touch-action:none;-webkit-touch-call
 .stepname strong{display:block;font-size:.95rem}
 .stepname small{display:block;color:var(--muted);font-size:.8rem}
 .draftbar > .btn{padding:0 10px}
+.powerrow{flex:1 1 100%;display:flex;gap:8px}
+.powerrow .btn{flex:1;min-height:52px;font-size:1rem}
+.brushes{display:flex;gap:8px;overflow-x:auto;padding:2px 2px 6px;margin:0 -16px;padding-left:16px;padding-right:16px;scroll-snap-type:x proximity}
+.brushes .opt{flex:0 0 auto;scroll-snap-align:start;white-space:nowrap}
+.opt.brush[aria-pressed="true"]{border:2px solid var(--fg);background:var(--accent);color:var(--accent-ink);font-weight:700}
+.sheet .lead{margin:0;font-weight:700;font-size:1rem}
+.count.over{color:var(--danger);font-weight:700}
 .stepwarn{flex:1 1 100%;margin:0;font-size:.85rem;font-weight:700}
 .dot{display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--draft);margin-right:6px;vertical-align:middle}
 
@@ -349,7 +356,7 @@ const NAT_GLYPH = {Baneful:"skull", Burning:"flame", Carved:"block", Deep:"down"
   Hungry:"jaws", Lavish:"bowl", Quickening:"sprout", Radiant:"sun", Roaring:"roar", Skyward:"up", Still:"pause", Tangled:"tangle",
   Teeming:"swarm", Veiled:"eyelid", Wild:"spiral"};
 const MARKERS = {legend:["Dot","dot"], city:["Star","star"], army:["Square","square"], wonder:["Diamond","diamond"],
-  tri:["Triangle","tri"], ring:["Ring","ring"], cross:["Cross","cross"], moon:["Crescent","moon"], flag:["Flag","flag"]}; // meaning is up to the players
+  tri:["Triangle","tri"], ring:["Ring","ring"], built:["House","house"], cross:["Cross","cross"], moon:["Crescent","moon"], flag:["Flag","flag"]}; // meaning is up to the players
 const PALETTE = [["Crimson","#c8323c"],["Amber","#e0912f"],["Gold","#e6c440"],["Leaf","#4caf50"],["Teal","#1fa39a"],["Sky","#3d9be0"],
   ["Indigo","#4b56c8"],["Violet","#8e4fc8"],["Rose","#e05f9c"],["Umber","#8a5a3b"],["Slate","#5f6b7a"],["Bone","#efe6d2"]];
 const AGES = {1:["First Age",19],2:["Second Age",7],3:["Third Age",1]};
@@ -415,7 +422,7 @@ function wire(changes){
 function applyDefs(list){
   for (const p of list){
     for (const [id,t] of Object.entries(p.types || {})){ if (t.kind === "land") customLand.set("x-"+id, {name:t.name, color:t.color||"#8f8a82", pen:t.pen, glyph:t.glyph}); else if (t.name) customNat.set(t.name, t.glyph || customNat.get(t.name) || null); }
-    for (const [id,v] of Object.entries(p.peoples || {})) peoples.set(id, {name:v.name, color:v.color});
+    for (const [id,v] of Object.entries(p.peoples || {})) peoples.set(id, {name:v.name, color:v.color, ...(v.of ? {of: v.of} : {})});
     if (p.world){ if (AGES[p.world.age]) age = p.world.age; if (p.world.cols && p.world.rows){ COLS = p.world.cols; ROWS = p.world.rows; } }
   }
 }
@@ -424,14 +431,24 @@ function view(id){ return histIdx!==null ? (histState.get(id)||null) : merge(bas
 /* ---- steps: a draft is a list of steps, each one use of a power (Shape Land, Shape Climate…).
    The map shows your steps up to the one you're on, so you can step back and forth before you publish.
    Where two steps change the same hex, the later one wins. `draft` is always the combined patch up to the current step. ---- */
-const POWERS = [["Land", ["Shape Land","Shape Climate","Rouse"]],
-  ["Peoples and cities", ["Create Ancestry","Create Heritage","Settle","Found City","Build","Raise Army","March Army","Treat"]],
-  ["Legends", ["Create Legend","Resurrect Legend","Perform Deed"]],
-  ["Fate", ["Exalt","Align","Event","Catastrophe"]]];
-const AREA_POWERS = new Set(["Shape Land","Shape Climate","Catastrophe"]);   // one use covers up to one area
+const AREA_POWERS = new Set(["Shape Land","Shape Climate","Catastrophe","Settle","Create Ancestry","Rouse"]);   // one use covers up to one area
+// a step: which power, its changes (hex -> patch), and for some powers the new people it made or the thing it named
 const emptyStep = () => ({power:null, ch:{}});
-// steps are opt-in from the menu for now; with them off the draft is one step and the bar is the plain one
-const stepsOn = () => lsGet("soc-steps-on") === "1";
+// powers (opt-in from the menu for now): tapping a hex only shows it; each change is a step, made through
+// "Use a power" or "Edit freely". With powers off the draft is one step and the bar is the plain one.
+const powersOn = () => lsGet("soc-powers-on") === "1";
+let mode = null, brush = null;     // mode: the power being used ("Edit" = edit freely); brush: what a tap paints
+const PAINT_POWERS = [["Land", ["Shape Land","Shape Climate"]], ["Peoples", ["Create Ancestry","Create Heritage","Settle"]],
+  ["Cities and legends", ["Found City","Build","Raise Army","March Army","Create Legend"]], ["Fate", ["Exalt","Catastrophe"]]];   // the powers the map can do so far
+const PEOPLE_POWERS = new Set(["Create Ancestry","Create Heritage","Settle"]);
+// in each age the powers it's about come first
+const AGE_FIRST = {1: ["Shape Land","Shape Climate","Exalt"], 2: ["Create Ancestry","Settle","Create Heritage","Found City"], 3: ["Found City","Build","Raise Army","March Army","Create Legend","Catastrophe"]};
+// powers that put one named thing on the map: a city, an army, something built, a legend. One tap, a name, and the step is done.
+const PLACE_POWERS = new Set(["Found City","Build","Raise Army","March Army","Create Legend","Exalt"]);
+const THINGS = ["city","army","built","legend","wonder"];
+function* everyHex(){ for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) yield hid(c,r); }
+const thingsAt = (id, k) => ((view(id) || {}).m || []).filter(m => m.k === k && !m.x);
+function allThings(k){ const out = []; for (const id of everyHex()) for (const m of thingsAt(id, k)) out.push({id, m}); return out; }
 let steps = [emptyStep()], cur = 0;
 const stepSize = st => Object.keys(st.ch).length;
 function patchUpTo(id, n){ let p = null; for (let i = 0; i < n; i++){ const q = steps[i].ch[id]; if (q) p = Object.assign(p || {}, q); } return p; }
@@ -450,25 +467,228 @@ function setField(id, field, value){
   rebuildDraft();
 }
 function goStep(i){ cur = Math.max(0, Math.min(steps.length - 1, i)); rebuildDraft(); saveDraftLocal(); renderDraftBar(); renderSheet(); draw(); say(`Step ${cur+1} of ${steps.length}${steps[cur].power ? ", " + steps[cur].power : ""}.`); }
-function newStep(){
-  if (stepSize(steps[cur])) { snapshot(); steps.splice(cur + 1, 0, emptyStep()); cur++; rebuildDraft(); afterEdit(); }
-  pickPower();
-}
-function pickPower(){
-  const st = steps[cur], set = pw => { snapshot(); st.power = pw; closeModal(); afterEdit(); };
-  const body = [];
-  for (const [group, list] of POWERS) body.push(el("p",{class:"sub"}, group), el("div",{class:"chips"}, list.map(pw => el("button",{type:"button", class:"chip", style:"padding-right:12px", "aria-pressed": String(st.power === pw), onclick:() => set(pw)}, pw))));
-  body.push(el("div",{class:"row", style:"margin-top:12px"},
-    el("button",{type:"button", class:"btn", onclick:() => set(null)}, "No power"),
-    steps.length > 1 ? el("button",{type:"button", class:"btn danger", onclick:() => { snapshot(); steps.splice(cur, 1); cur = Math.min(cur, steps.length - 1); rebuildDraft(); closeModal(); afterEdit(); toast("Step deleted."); }}, "Delete this step") : null));
-  openModal(`Step ${cur+1}: which power?`, body);
-}
 function clearSteps(){ steps = [emptyStep()]; cur = 0; draft.clear(); }
+// start using a power: a new step at the end (or carry on with the step you're on, when resuming it)
+function enterPower(power, resume){
+  closeModal(); clearSelection();
+  if (!resume){
+    const last = steps[steps.length - 1];
+    if (stepSize(last) && !(power === "Edit" && last.power === "Edit")){ snapshot(); steps.push(emptyStep()); }
+    cur = steps.length - 1; steps[cur].power = power; rebuildDraft();
+  }
+  mode = {power: steps[cur].power || power}; steps[cur].power = mode.power; brush = startBrush(); brushOptions.scroll = 0;
+  afterEdit(); say(mode.power === "Edit" ? "Editing freely. Tap a hex to change it." : `${mode.power}. Pick what to paint, then tap hexes.`);
+}
+// what a power paints with when it starts (or is carried on from the steps bar), when there's only one sensible choice
+function startBrush(){
+  const pw = mode.power, own = steps[cur].people, only = peoples.size === 1 ? [...peoples.keys()][0] : null;
+  if (own) return {k:"people", v:own};                                           // the people this step made
+  if (pw === "Settle" && only) return {k:"people", v:only};
+  if (pw === "Found City") return only ? {k:"city", v:only} : null;
+  if (PLACE_POWERS.has(pw)) return {k:"place"};
+  return null;
+}
+// the peoples powers ask who first: a new people (color, then name), a heritage (of which people), or who settles
+function startPeoplePower(pw){
+  const list = [...peoples].map(([pid,v]) => ({pid, ...v}));
+  if (pw === "Settle"){
+    if (!list.length){ toast("There are no peoples yet. Create an ancestry first."); return; }
+    enterPower(pw); return;
+  }
+  const make = of => (peopleForm.state = null, openModal(pw === "Create Ancestry" ? "A new people" : "A new heritage", [peopleForm(async (nm, color) => {
+    const pid = await addPeople(nm, color, of); enterPower(pw); steps[cur].people = pid; brush = startBrush(); renderSheet(); draw();
+    say(`${nm}. Tap hexes where they live.`);
+  }), el("div",{class:"row"}, el("span",{class:"grow"}), el("button",{type:"button", class:"btn primary", onclick:() => $("mBody").querySelector("form").requestSubmit()}, "Next"))]));
+  if (pw === "Create Ancestry") return make(null);
+  if (!list.length){ toast("There are no peoples yet. Create an ancestry first."); return; }
+  openModal("A heritage of which people?", el("div",{class:"opts"}, list.map(x => el("button",{type:"button", class:"opt", onclick:() => make(x.pid)}, swatch(x.color), x.name))));
+}
+function startPlacePower(pw){
+  if (pw === "Found City" && !peoples.size){ toast("There are no peoples yet. Create an ancestry first."); return; }
+  if (pw === "Raise Army" && !allThings("city").length){ toast("There are no cities yet. Found one first."); return; }
+  if (pw === "March Army" && !allThings("army").length){ toast("There are no armies yet. Raise one first."); return; }
+  enterPower(pw);
+  if (pw === "Exalt") openModal("A wonder", [el("p",{class:"note"}, "A land form gains a wonder: one thing in it, or the whole of it becoming its nature entirely."),
+    el("div",{class:"opts"},
+      el("button",{type:"button", class:"opt", onclick:() => { mode.whole = false; closeModal(); renderSheet(); }}, "One place in it"),
+      el("button",{type:"button", class:"opt", onclick:() => { mode.whole = true; closeModal(); renderSheet(); }}, "The whole land form"))]);
+}
+// the land form a hex belongs to: every connected hex of the same land
+function landFormOf(id){
+  const t = (view(id) || {}).t, out = [id], seen = new Set([id]);
+  for (let i = 0; i < out.length; i++){ const [c,r] = parse(out[i]);
+    for (const [nc,nr] of edgeNeighbors(c,r)){ const n = hid(nc,nr); if (inB(nc,nr) && !seen.has(n) && (view(n) || {}).t === t){ seen.add(n); out.push(n); } } }
+  return out;
+}
+// a small form for a name, with anything else the thing needs above it
+function nameThing(title, placeholder, extra, onOk){
+  const input = el("input",{id:"thingName", placeholder, autocomplete:"off"});
+  const f = el("form",{class:"form", onsubmit:e => { e.preventDefault(); const v = input.value.trim(); if (!v){ input.focus(); toast("Give it a name."); return; } closeModal(); onOk(v); }},
+    ...(extra || []), el("label",{for:"thingName"}, "Name"), input, el("div",{class:"row"}, el("span",{class:"grow"}), el("button",{type:"submit", class:"btn primary"}, "Place")));
+  openModal(title, f); setTimeout(() => input.focus(), 50);
+}
+function addThing(id, thing){
+  snapshot(); setField(id, "m", [...((view(id) || {}).m || []), {id: rid(), ...thing}]);
+  steps[cur].thing = thing.label; exitPower(); toast(`${thing.label} is on the map.`); say(`${thing.label} placed.`);
+}
+const hexDist = (a, b) => { const [c1,r1] = parse(a), [c2,r2] = parse(b), q1 = c1 - (r1 - (r1&1))/2, q2 = c2 - (r2 - (r2&1))/2; return (Math.abs(q1-q2) + Math.abs(r1-r2) + Math.abs(q1+r1-q2-r2)) / 2; };
+const pickOne = (box, b) => { for (const x of box.children) x.setAttribute("aria-pressed", String(x === b)); };
+function placeAt(id){
+  const d = view(id) || {}, pw = mode.power;
+  if (pw === "Found City"){
+    if (!brush){ toast("Pick whose city it is first."); return; }
+    const who = peoples.get(brush.v), pid = brush.v;
+    if (d.p !== pid) toast(`The ${who.name} don't live here. You can still found it.`);
+    nameThing(`A city of the ${who.name}`, "Name, such as Vgd", null, nm => addThing(id, {k:"city", label:nm, color:who.color, p:pid}));
+  } else if (pw === "Raise Army"){
+    const cs = thingsAt(id, "city"); if (!cs.length){ toast("Tap one of the lit cities."); return; }
+    const city = cs[0];
+    nameThing(`An army of ${city.label}`, "Name, such as The Iron Host", null, nm => addThing(id, {k:"army", label:nm, color:city.color, of:city.id}));
+  } else if (pw === "March Army"){
+    if (!mode.army){
+      const as = thingsAt(id, "army"); if (!as.length){ toast("Tap one of the lit armies."); return; }
+      const go = a => { closeModal(); mode.army = {from:id, m:a}; renderSheet(); draw(); say(`${a.label}. Tap where it marches.`); };
+      if (as.length === 1) go(as[0]);
+      else openModal("Which army?", el("div",{class:"opts"}, as.map(a => el("button",{type:"button", class:"opt", onclick:() => go(a)}, a.label))));
+    } else {
+      const {from, m} = mode.army; if (id === from){ toast("Tap another hex for it to march to."); return; }
+      snapshot(); setField(from, "m", ((view(from) || {}).m || []).filter(x => x.id !== m.id)); setField(id, "m", [...(d.m || []), m]);
+      steps[cur].thing = m.label; exitPower(); toast(`${m.label} marches.`); say(`${m.label} moved.`);
+    }
+  } else if (pw === "Build"){
+    const near = allThings("city").sort((a,b) => hexDist(a.id, id) - hexDist(b.id, id)).slice(0, 6);
+    let by = near.length ? near[0].m.id : null;
+    const box = el("div",{class:"chips"});
+    for (const {m} of near) box.append(el("button",{type:"button", class:"chip pick", style:"padding-right:12px", "aria-pressed": String(by === m.id), onclick:e => { by = m.id; pickOne(box, e.currentTarget); }}, m.label));
+    if (near.length) box.append(el("button",{type:"button", class:"chip pick", style:"padding-right:12px", "aria-pressed":"false", onclick:e => { by = null; pickOne(box, e.currentTarget); }}, "No city"));
+    nameThing("Something built", "Name, such as The Long Wall", near.length ? [el("span",{class:"sub"}, "Built by"), box] : null, nm => {
+      const city = near.find(x => x.m.id === by); addThing(id, {k:"built", label:nm, color: city ? city.m.color : "#efe6d2", ...(city ? {of: city.m.id} : {})}); });
+  } else if (pw === "Exalt"){
+    if (!d.t){ toast("Tap a land form."); return; }
+    if (mode.whole){
+      const ids = landFormOf(id);
+      nameThing(`A wonder over ${ids.length} ${ids.length === 1 ? "hex" : "hexes"}`, "Name, such as The Valley of Perpetual Night", null, nm => {
+        snapshot(); for (const x of ids) setField(x, "w", nm); steps[cur].thing = nm; exitPower(); toast(`${nm} is on the map.`); say(`${nm} placed.`); });
+    } else nameThing("A wonder", "Name, such as The World Tree", null, nm => addThing(id, {k:"wonder", label:nm, color:"#e6c440"}));
+  } else if (pw === "Create Legend"){
+    nameThing("A legend", "Name, such as The Grey Company", null, nm => addThing(id, {k:"legend", label:nm, color:"#e6c440"}));
+  }
+}
+// where the power in use can reach, lit up on the map
+function reach(){
+  if (!powersOn() || !mode || !brush) return null;
+  const pw = mode.power, where = test => { const out = new Set(); for (const id of everyHex()) if (test(id, view(id) || {})) out.add(id); return out; };
+  if (pw === "Found City") return where((id, d) => d.p === brush.v && !thingsAt(id, "city").length);                 // where the people live
+  if (pw === "Raise Army") return where(id => thingsAt(id, "city").length > 0);                                        // cities
+  if (pw === "March Army") return mode.army ? null : where(id => thingsAt(id, "army").length > 0);                     // armies
+  if (pw === "Catastrophe" && brush.k === "destroy") return where((id, d) => (d.m || []).some(m => !m.x && THINGS.includes(m.k)));
+  if (pw === "Settle") return where((id, d) => d.t && d.p !== brush.v &&                                                // next to where they live
+    edgeNeighbors(...parse(id)).some(([c,r]) => inB(c,r) && (view(hid(c,r)) || {}).p === brush.v));
+  if (pw === "Create Heritage"){ const of = (peoples.get(brush.v) || {}).of; return of ? where((id, d) => d.p === of) : null; }   // the parent people
+  return null;
+}
+// Catastrophe destroys a thing: it stays on the map, crossed out, since survivors remain unless the wipe-out cost is paid
+function destroyAt(id){
+  const live = ((view(id) || {}).m || []).filter(m => !m.x && THINGS.includes(m.k));
+  if (!live.length){ toast("Tap one of the lit hexes."); return; }
+  const kill = m => { closeModal(); snapshot(); setField(id, "m", ((view(id) || {}).m || []).map(x => x.id === m.id ? {...x, x: true} : x)); steps[cur].thing = `${m.label || "it"} destroyed`; afterEdit(); toast(`${m.label || "It"} is destroyed.`); say(`${m.label || "It"} destroyed.`); };
+  if (live.length === 1) kill(live[0]);
+  else openModal("Destroy which?", el("div",{class:"opts"}, live.map(m => el("button",{type:"button", class:"opt", onclick:() => kill(m)}, m.label || (MARKERS[m.k] || ["Marker"])[0]))));
+}
+// a new ancestry: "a legend arises within the new people for each player who paid toward it", aligned toward that player
+function offerLegends(pid, again){
+  const who = peoples.get(pid); if (!who) return;
+  const ids = Object.keys(steps[cur].ch).filter(id => (view(id) || {}).p === pid); if (!ids.length) return;
+  let sx = 0, sy = 0; for (const id of ids){ const [x,y] = center(...parse(id)); sx += x; sy += y; } sx /= ids.length; sy /= ids.length;
+  const home = ids.reduce((a,b) => { const [ax,ay] = center(...parse(a)), [bx,by] = center(...parse(b)); return Math.hypot(ax-sx, ay-sy) <= Math.hypot(bx-sx, by-sy) ? a : b; });
+  const add = () => {
+    const al = el("input",{id:"alignedTo", autocomplete:"off"}); al.value = myName();
+    nameThing(`A legend of the ${who.name}`, "Name, such as The First Mother", [el("label",{for:"alignedTo"}, "Aligned to (first level)"), al], nm => {
+      snapshot(); setField(home, "m", [...((view(home) || {}).m || []), {id: rid(), k:"legend", label:nm, color: who.color, p: pid, ...(al.value.trim() ? {aligned: al.value.trim()} : {})}]);
+      afterEdit(); toast(`${nm} is on the map.`); offerLegends(pid, true); });
+  };
+  openModal(again ? "Another legend?" : "Legends arise", [
+    el("p",{class:"note"}, again ? "Add one for each player who paid toward the ancestry." : `A legend arises within the ${who.name} for each player who paid toward them, aligned toward that player.`),
+    el("div",{class:"row"}, el("button",{type:"button", class:"btn", onclick:closeModal}, again ? "That's all" : "Not now"), el("span",{class:"grow"}), el("button",{type:"button", class:"btn primary", onclick:add}, "Add a legend"))]);
+}
+function exitPower(){
+  // a new ancestry that's been placed (and has no legends yet) offers to add the legends that arise with it
+  const st = steps[cur], legends = st.power === "Create Ancestry" && st.people && stepSize(st) && !Object.values(st.ch).some(p => p.m);
+  if (!stepSize(st)){
+    if (st.people){ delete draftDefs.peoples[st.people]; rebuildDefs(); }     // a people made but never placed goes away again
+    if (steps.length > 1){ steps.splice(cur, 1); cur = steps.length - 1; } else steps[0] = emptyStep();
+    rebuildDraft();
+  }
+  mode = null; brush = null; clearSelection(); afterEdit();
+  if (legends) offerLegends(st.people);
+}
+function choosePower(){
+  const body = [], first = AGE_FIRST[age] || [], go = pw => () => PEOPLE_POWERS.has(pw) ? startPeoplePower(pw) : PLACE_POWERS.has(pw) ? startPlacePower(pw) : enterPower(pw);
+  if (first.length) body.push(el("p",{class:"sub"}, `The ${AGES[age][0]}`), el("div",{class:"opts"}, first.map(pw => el("button",{type:"button", class:"opt", onclick:go(pw)}, pw))));
+  for (const [group, list] of PAINT_POWERS){ const rest = list.filter(pw => !first.includes(pw)); if (rest.length) body.push(el("p",{class:"sub"}, first.length ? `More · ${group}` : group), el("div",{class:"opts"}, rest.map(pw => el("button",{type:"button", class:"opt", onclick:go(pw)}, pw)))); }
+  body.push(el("p",{class:"note"}, "Rouse, Align, Treat and Event don't change the map. For anything else, use Edit freely."));
+  openModal("Use a power", body);
+}
+// a new ancestry, or a people settling, starts from one tap: it spreads over the connected land of the same kind
+// (that it doesn't already live in), nearest first, until it reaches one area or runs out of that land, whichever is smaller
+function spreadFrom(id, who){
+  const t = (view(id) || {}).t, area = AGES[age][1], out = [id], seen = new Set([id]), ok = n => { const d = view(n) || {}; return d.t === t && d.p !== who; };
+  for (let i = 0; i < out.length && out.length < area; i++){
+    const [c,r] = parse(out[i]);
+    for (const [nc,nr] of edgeNeighbors(c,r)){ if (out.length >= area) break; const n = hid(nc,nr);
+      if (inB(nc,nr) && !seen.has(n) && ok(n)){ seen.add(n); out.push(n); } }
+  }
+  return out;
+}
+// a tap paints the brush onto a hex; a second tap on the same hex takes this step's paint off again
+function paintHex(id){
+  if (PLACE_POWERS.has(mode.power)) return placeAt(id);
+  if (mode.power === "Catastrophe" && brush && brush.k === "destroy") return destroyAt(id);
+  if (!brush){ toast(mode.power === "Shape Land" ? "Pick a land first." : mode.power === "Catastrophe" ? "Pick what it destroys first." : mode.power === "Settle" ? "Pick who settles first." : "Pick a nature first."); return; }
+  const d = view(id) || {}, mine = steps[cur].ch[id] || {};
+  if (brush.k !== "land" && !d.t){ toast("That hex needs land first."); return; }
+  const before = merge(base.get(id), patchUpTo(id, cur)) || {};
+  if ((mode.power === "Create Ancestry" || mode.power === "Settle") && !stepSize(steps[cur])){
+    const nm = (peoples.get(brush.v) || {}).name;
+    if (d.p === brush.v){ toast(`The ${nm} already live there. Tap a lit hex next to them.`); return; }
+    snapshot(); const ids = spreadFrom(id, brush.v);
+    for (const x of ids) setField(x, "p", brush.v);
+    afterEdit(); const msg = `${nm} ${mode.power === "Settle" ? "settle in" : "begin in"} ${ids.length} ${ids.length === 1 ? "hex" : "hexes"}. Tap hexes to add or take some away.`; toast(msg); say(msg); return;
+  }
+  snapshot();
+  if (brush.k === "land") setField(id, "t", "t" in mine ? (before.t ?? null) : brush.v);
+  else if (brush.k === "river") setField(id, "r", d.r ? null : true);
+  else if (brush.k === "wipe"){                    // land destroyed by Catastrophe becomes bare land with no nature; tapping again undoes it
+    if ("t" in mine) for (const f of ["t","n","r","w"]) setField(id, f, before[f] ?? null);
+    else for (const f of ["t","n","r","w"]) setField(id, f, null);
+  }
+  else if (brush.k === "people") setField(id, "p", "p" in mine ? (before.p ?? null) : brush.v);
+  else { const n = d.n || []; setField(id, "n", n.includes(brush.v) ? n.filter(x => x !== brush.v) : [...n, brush.v]); }
+  afterEdit(); say(describe(...parse(id)));
+}
+function brushOptions(){
+  const o = el("div",{class:"brushes", role:"group", "aria-label":"Paint"}), pick = b => { brush = b; renderSheet(); };
+  const on = b => brush && brush.k === b.k && brush.v === b.v;
+  const opt = (b, kids) => el("button",{type:"button", class:"opt brush", "aria-pressed": String(on(b)), onclick:() => pick(b)}, ...kids);
+  if (mode.power === "Shape Land"){
+    for (const [k,name] of LAND) o.append(opt({k:"land", v:k}, [landIcon(k), name]));
+    for (const [k,v] of customLand) o.append(opt({k:"land", v:k}, [landIcon(k), v.name]));
+    o.append(opt({k:"river"}, [hatchSwatch(RIVER_BLUE, "waves", 28), "River"]), opt({k:"land", v:null}, ["Clear land"]));
+  } else if (mode.power === "Catastrophe"){
+    o.append(opt({k:"wipe"}, ["Wipe land"]), opt({k:"destroy"}, ["Destroy a city, army or legend"]));
+  } else if (mode.power === "Found City"){
+    for (const [pid,v] of peoples) o.append(opt({k:"city", v:pid}, [swatch(v.color), v.name]));
+  } else if (PEOPLE_POWERS.has(mode.power)){
+    const own = steps[cur].people, list = own ? [[own, peoples.get(own)]] : [...peoples];
+    for (const [pid,v] of list) if (v) o.append(opt({k:"people", v:pid}, [swatch(v.color), v.name]));
+  } else for (const [nm] of [...NATURES, ...[...customNat.keys()].map(n => [n])]) o.append(opt({k:"nat", v:nm}, [natIcon(nm, 22), nm]));
+  return o;
+}
 function snapshot(){ undoStack.push(JSON.stringify({steps, cur})); if (undoStack.length > 60) undoStack.shift(); }
-function undo(){
+function undo(quiet){
   if (!undoStack.length) return;
   const prev = JSON.parse(undoStack.pop()); steps = prev.steps; cur = prev.cur; rebuildDraft();
-  sheetForm = null; afterEdit(); toast("Undone."); say("Undone.");
+  sheetForm = null; afterEdit(); if (!quiet){ toast("Undone."); say("Undone."); }
 }
 function afterEdit(){ saveDraftLocal(); renderDraftBar(); renderSheet(); draw(); }
 
@@ -682,6 +902,7 @@ function shapeContours(shape){
     case "ring": return [{pts: circlePts(0,0,.85).slice(0,-1), smooth:true}, {pts: circlePts(0,0,.42,0,Math.PI*2,9).slice(0,-1).reverse(), smooth:true}];
     case "cross": { const a=.3, b=.9; return [{pts: [[-a,-b],[a,-b],[a,-a],[b,-a],[b,a],[a,a],[a,b],[-a,b],[-a,a],[-b,a],[-b,-a],[-a,-a]]}]; }
     case "moon": return [{pts: [...circlePts(0,0,.85,Math.PI*.3,Math.PI*1.7,12), ...circlePts(.42,0,.62,Math.PI*1.62,Math.PI*.38,8)].reverse(), smooth:true}];
+    case "house": return [{pts: [[0,-.95],[.85,-.2],[.85,.85],[-.85,.85],[-.85,-.2]]}];
     case "flag": return [{pts: [[-.6,.95],[-.6,-.95],[.8,-.55],[-.35,-.1],[-.35,.95]]}];
     default: return [{pts: Array.from({length:10}, (_,i) => { const a = -Math.PI/2 + i*Math.PI/5, rr = i%2 ? .45 : 1; return [rr*Math.cos(a), rr*Math.sin(a)]; })}];
   }
@@ -770,7 +991,7 @@ function paint(){
   catch(e){ console.error("paint failed", e); try { ctx.restore(); } catch(_){} }
 }
 // unpublished hexes and the ones being edited are drawn in pencil, not ink
-const pencilled = id => (stepsOn() ? id in steps[cur].ch : draft.has(id)) || selection.has(id);
+const pencilled = id => (powersOn() ? id in steps[cur].ch : draft.has(id)) || selection.has(id);
 function paintMap(){
   clampView();
   ctx.setTransform(DPR,0,0,DPR,0,0); ctx.fillStyle = css("--void"); ctx.fillRect(0,0,W,H);
@@ -908,6 +1129,21 @@ function paintMap(){
       }
     }
   }
+  // a wonder that is a whole land form: a dotted line round it and its name once, near the middle
+  if (px >= 10){
+    const wonders = new Map();
+    for (const id of everyHex()){ const d = view(id); if (d && d.w){ if (!wonders.has(d.w)) wonders.set(d.w, new Set()); wonders.get(d.w).add(id); } }
+    for (const [name, ids] of wonders){
+      groupEdges(ids, S*.8, .03); ctx.setLineDash([S*.05, S*.11]); ctx.strokeStyle = ink; ctx.lineWidth = Math.max(1.4*lw, S*.06); ctx.lineCap = "round"; ctx.stroke(); ctx.setLineDash([]);
+      if (px < 18) continue;
+      let sx = 0, sy = 0; for (const id of ids){ const [x,y] = center(...parse(id)); sx += x; sy += y; } sx /= ids.size; sy /= ids.size;
+      let best = null, bd = Infinity; for (const id of ids){ const [x,y] = center(...parse(id)), dd = Math.hypot(x - sx, y - sy); if (dd < bd){ bd = dd; best = [x,y]; } }
+      const fs = Math.max(11/V.k, S*.26); ctx.font = `700 ${fs}px "Atkinson Hyperlegible", sans-serif`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      const w = ctx.measureText(name).width + fs, h = fs*1.6, [bx,by] = best;
+      ctx.beginPath(); ctx.roundRect ? ctx.roundRect(bx - w/2, by - h/2, w, h, h/2) : ctx.rect(bx - w/2, by - h/2, w, h);
+      ctx.fillStyle = surface; ctx.fill(); ctx.lineWidth = Math.max(lw, S*.035); ctx.strokeStyle = ink; ctx.stroke(); ctx.fillStyle = ink; ctx.fillText(name, bx, by + fs*.05);
+    }
+  }
   // natures in ink along the bottom of the hex; markers as pieces in the middle
   for (const [c,r,cx,cy,d,L] of cells){
     const nat = d.n || [];
@@ -923,7 +1159,14 @@ function paintMap(){
     else if (nat.length && px >= 18) badge(nat.slice(0,1), 0, S*.44, S*.54, cy + S*.42);   // zoomed out: just the first nature, a little bigger
     const ms = d.m || []; if (!ms.length) continue;
     const over = ms.length > 4, k = over ? 4 : ms.length, spots = MARKER_SPOTS[k], r0 = S*MARKER_R[k];
-    ms.slice(0, over ? 3 : 4).forEach((m,i) => marker(MARKERS[m.k] ? MARKERS[m.k][1] : "dot", cx + spots[i][0]*S, cy + spots[i][1]*S, r0, m.color || "#e6c440", ink, seedOfId(m.id)));
+    ms.slice(0, over ? 3 : 4).forEach((m,i) => {
+      const x = cx + spots[i][0]*S, y = cy + spots[i][1]*S;
+      if (!m.x) return marker(MARKERS[m.k] ? MARKERS[m.k][1] : "dot", x, y, r0, m.color || "#e6c440", ink, seedOfId(m.id));
+      // destroyed: faded, and crossed out in ink
+      ctx.save(); ctx.globalAlpha = .4; marker(MARKERS[m.k] ? MARKERS[m.k][1] : "dot", x, y, r0, m.color || "#e6c440", ink, seedOfId(m.id)); ctx.restore();
+      ctx.beginPath(); ctx.moveTo(x - r0, y - r0); ctx.lineTo(x + r0, y + r0); ctx.moveTo(x + r0, y - r0); ctx.lineTo(x - r0, y + r0);
+      ctx.strokeStyle = ink; ctx.lineWidth = r0*.2; ctx.lineCap = "round"; ctx.stroke();
+    });
     if (over){ const [sx,sy] = spots[3], x = cx + sx*S, y = cy + sy*S;
       roughShape(ctx, "dot", x, y, r0*1.27, 5, .08); ctx.fillStyle = surface; ctx.fill(); ctx.lineWidth = r0*.14; ctx.strokeStyle = ink; ctx.stroke();
       ctx.fillStyle = ink; ctx.font = `700 ${r0*.95}px "Space Mono", monospace`; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(`+${ms.length-3}`, x, y + r0*.04); }
@@ -950,10 +1193,14 @@ function paintMap(){
   // draft marks, history outlines, selection, focus
   ctx.lineCap = "round"; ctx.lineJoin = "round";
   if (histIdx === null){
+    // where the power in use can reach: a highlighter wash
+    const lit = reach();
+    if (lit && lit.size){ ctx.save(); ctx.globalAlpha = .45; ctx.fillStyle = css("--accent");
+      for (const id of lit){ const [c,r] = parse(id); const [cx,cy] = center(c,r); if (vis(cx,cy)){ hexPath(cx, cy, S*.9); ctx.fill(); } } ctx.restore(); }
     // unpublished changes: a faint pencil outline, sketched but not inked yet
     // the edges of unpublished hexes, and any coastline they touch, are pencilled in place of the ink
     if (draft.size || selection.size){
-      const P = new Set([...(stepsOn() ? Object.keys(steps[cur].ch) : draft.keys()), ...selection]);
+      const P = new Set([...(powersOn() ? Object.keys(steps[cur].ch) : draft.keys()), ...selection]);
       ctx.beginPath();
       for (const id of P){
         const [c,r] = parse(id); if (!inB(c,r)) continue; const [cx,cy] = center(c,r); if (!vis(cx,cy)) continue; const d = view(id) || {};
@@ -990,6 +1237,7 @@ function describe(c,r){
   if (d.r) parts.push("River.");
   if (d.n && d.n.length) parts.push("Natures: " + d.n.join(", ") + ".");
   if (d.p && peoples.has(d.p)) parts.push("Settled by " + peoples.get(d.p).name + ".");
+  if (d.w) parts.push("Part of the wonder " + d.w + ".");
   if (d.m && d.m.length) parts.push("Markers: " + d.m.map(m => `${(PALETTE.find(p=>p[1]===m.color)||[""])[0]} ${(MARKERS[m.k]?.[0]||"marker").toLowerCase()}${m.label?" "+m.label:""}`.trim()).join(", ") + ".");
   if (selection.has(hid(c,r))) parts.push("Selected.");
   return parts.join(" ");
@@ -998,7 +1246,7 @@ function say(t){ const l = $("live"); l.textContent = ""; setTimeout(() => l.tex
 
 /* ================= pointer input ================= */
 const pts = new Map(); let G = null;
-const editing = () => histIdx === null && canWrite;
+const editing = () => histIdx === null && canWrite && (!powersOn() || (mode && mode.power === "Edit"));
 canvas.addEventListener("pointerdown", e => {
   if (!hinted){ hinted = true; rememberHint(); updateHint(); }
   canvas.setPointerCapture(e.pointerId); pts.set(e.pointerId, {x:e.offsetX, y:e.offsetY});
@@ -1087,7 +1335,8 @@ function tap(sx, sy){
   // a second tap in the same spot only zooms: put the selection back the way it was before the first tap
   const now = performance.now();
   if (lastTap && now - lastTap.t < 320 && Math.hypot(sx - lastTap.x, sy - lastTap.y) < 30){
-    const u = lastTap.undo; lastTap = null;
+    const u = lastTap.undo, painted = lastTap.painted; lastTap = null;
+    if (painted) undo(true);                         // a double tap zooms: take back the paint from its first tap
     if (u){ selection.clear(); for (const id of u.sel) selection.add(id); adding = u.adding; regrouping = u.regrouping;
       growStack.length = 0; growStack.push(...u.grow); sheetCat = u.cat; sheetForm = u.form; reveal = null; renderSheet(); }
     zoomAt(2, sx, sy); return;
@@ -1095,10 +1344,12 @@ function tap(sx, sy){
   lastTap = {t: now, x: sx, y: sy, undo: moveState ? null : {sel:[...selection], adding, regrouping, grow:[...growStack], cat:sheetCat, form:sheetForm}};
   const h = pick(...toWorld(sx,sy)); if (!h) return;
   if (moveState){ moveMarkerTo(hid(...h)); return; }
+  if (powersOn() && mode && mode.power !== "Edit"){ if (canWrite && histIdx === null){ paintHex(hid(...h)); lastTap.painted = true; } return; }
   selectHex(hid(...h), false);
 }
 let reveal = null;
 let autoLand = false;     // the Land list was opened for us because the hex had no land yet
+const writable = () => canWrite && !(powersOn() && !mode);    // with powers on, a tapped hex is only looked at
 function needsLand(ids){ return ids.length > 0 && ids.some(id => !(view(id)||{}).t); }
 let adding = false;
 let regrouping = false;
@@ -1275,7 +1526,7 @@ canvas.addEventListener("keydown", e => {
   const k = e.key; let [c,r] = focusHex || [0,0];
   const moves = {ArrowLeft:[-1,0], ArrowRight:[1,0], ArrowUp:[0,-1], ArrowDown:[0,1]};
   if (moves[k]){ e.preventDefault(); const [dc,dr] = moves[k]; const nc = Math.min(COLS-1,Math.max(0,c+dc)), nr = Math.min(ROWS-1,Math.max(0,r+dr)); focusHex = [nc,nr]; ensureVisible(nc,nr); draw(); say(describe(nc,nr)); }
-  else if ((k===" " || k==="Enter") && editing()){ e.preventDefault(); const id = hid(c,r); if (moveState) moveMarkerTo(id); else { selectHex(id, k === " "); say(describe(c,r)); } }
+  else if ((k===" " || k==="Enter") && editing()){ e.preventDefault(); const id = hid(c,r); if (moveState) moveMarkerTo(id); else if (powersOn() && mode && mode.power !== "Edit") paintHex(id); else { selectHex(id, k === " "); say(describe(c,r)); } }
   else if (k==="Escape"){ clearSelection(); say("Selection cleared."); }
   else if (k==="+" || k==="="){ zoomAt(1.4, W/2, H/2); }
   else if (k==="-"){ zoomAt(1/1.4, W/2, H/2); }
@@ -1341,9 +1592,13 @@ function renderSheet(){
     else if (form) sheet.append(el("div",{class:"sfoot"},
       el("button",{type:"button", class:"btn", onclick:()=>{ sheetForm=null; landForm.state = null; renderSheet(); }}, "Cancel"), el("span",{class:"grow"}),
       el("button",{type:"button", class:"btn primary", onclick:()=>form.requestSubmit()}, form.dataset.label)));
+    else if (powersOn() && mode && (mode.power !== "Edit" || !n)) sheet.append(el("div",{class:"sfoot"},
+      el("button",{type:"button", class:"btn", disabled: !undoStack.length || null, onclick:() => undo()}, "Undo"),
+      el("span",{class:"what"}, ""),
+      el("button",{type:"button", class:"btn primary", onclick:exitPower}, "Done")));
     else sheet.append(el("div",{class:"sfoot"},
-      canWrite ? el("button",{type:"button", class:"btn", disabled: !undoStack.length || null, onclick:undo}, "Undo") : null,
-      el("span",{class:"what"}, !n ? "No hexes selected" : adding ? `${n} ${n===1?"hex":"hexes"} · tap to add or remove` : n === 1 ? "Hold another hex to add it" : `${n} hexes selected`),
+      writable() ? el("button",{type:"button", class:"btn", disabled: !undoStack.length || null, onclick:() => undo()}, "Undo") : null,
+      el("span",{class:"what"}, !writable() ? "" : !n ? "No hexes selected" : adding ? `${n} ${n===1?"hex":"hexes"} · tap to add or remove` : n === 1 ? "Hold another hex to add it" : `${n} hexes selected`),
       el("button",{type:"button", class:"btn primary", onclick:clearSelection}, "Done")));
   }
   renderDraftBar(); updateHint();
@@ -1354,10 +1609,46 @@ function fillSheet(){
   // if land turns up after we jumped to the Land list (posts still loading, another player's post), go back to the overview
   if (autoLand && sheetCat === "Land" && !sheetForm && [...selection].some(id => (view(id)||{}).t)) sheetCat = null;
   if (sheetCat !== "Land") autoLand = false;
-  const show = (selection.size > 0 || regrouping) && histIdx === null;
+  const painting = powersOn() && mode && mode.power !== "Edit";
+  const show = ((selection.size > 0 || regrouping) || (powersOn() && mode)) && histIdx === null;
   sheet.hidden = !show;
   sheet.textContent = "";
   if (!show) return;
+  if (painting){
+    if (PLACE_POWERS.has(mode.power)){
+      const who = brush && brush.v && peoples.get(brush.v);
+      const hint = {"Found City": !who ? "Pick whose city it is." : `Tap a lit hex, where the ${who.name} live, to found the city.`,
+        "Raise Army": "Tap one of the lit cities to raise an army there.",
+        "March Army": mode.army ? `Tap where ${mode.army.m.label} marches.` : "Tap one of the lit armies.",
+        "Build": "Tap the hex where it stands.",
+        "Create Legend": "Tap where the legend is. Legends can be anywhere.",
+        "Exalt": mode.whole ? "Tap the land form. The whole of it becomes the wonder." : "Tap the hex where the wonder stands."}[mode.power];
+      sheet.append(el("div",{class:"shead"}, el("div",{class:"stitle"}, el("h2",{}, mode.power))));
+      if (mode.power === "Found City" && peoples.size > 1) sheet.append(brushOptions());
+      sheet.append(el("p",{class:"lead"}, hint));
+      return;
+    }
+    const n = stepSize(steps[cur]), area = AGES[age][1], limited = AREA_POWERS.has(mode.power);
+    sheet.append(el("div",{class:"shead"}, el("div",{class:"stitle"}, el("h2",{}, mode.power)),
+      el("span",{class:"count" + (limited && n > area ? " over" : "")}, limited ? `${n} of ${area}` : `${n} ${n === 1 ? "hex" : "hexes"}`)));
+    if (limited && n > area) sheet.append(el("p",{class:"stepwarn", role:"status"}, `⚠ ${n} hexes is more than one area (${area}).`));
+    const strip = brushOptions(), x = brushOptions.scroll || 0;
+    const hint = mode.power === "Catastrophe" ? (!brush ? "Pick what it destroys." : brush.k === "wipe" ? "Tap hexes to wipe them to bare land with no nature. Tap again to undo." : "Tap one of the lit things to destroy it. It stays on the map, crossed out.")
+      : !brush ? (mode.power === "Shape Land" ? "Pick a land, then tap hexes." : mode.power === "Settle" ? "Pick who settles, then tap hexes." : "Pick a nature, then tap hexes.")
+      : mode.power === "Settle" && !n ? `Tap a lit hex to settle the ${(peoples.get(brush.v) || {}).name} there. They spread over the land around it, up to one area.`
+      : mode.power === "Settle" ? "Tap hexes to add or take some away. Done when it looks right."
+      : mode.power === "Create Heritage" ? "Tap the hexes where the heritage lives. The lit hexes are its parent people's."
+      : mode.power === "Create Ancestry" && !n ? `Tap the hex where the ${(peoples.get(brush.v) || {}).name} begin. They spread over the land around it, up to one area.`
+      : PEOPLE_POWERS.has(mode.power) ? "Tap hexes to add or take some away. Done when it looks right." : "Tap hexes to paint. Tap again to take it off.";
+    sheet.append(strip, el("p",{class: PEOPLE_POWERS.has(mode.power) && brush && !n ? "lead" : "note"}, hint));
+    strip.scrollLeft = x; requestAnimationFrame(() => { const on = strip.querySelector('[aria-pressed="true"]'); if (on) on.scrollIntoView({inline:"nearest", block:"nearest"}); });
+    strip.onscroll = () => { brushOptions.scroll = strip.scrollLeft; };   // keep the strip where it was between taps
+    return;
+  }
+  if (powersOn() && mode && !selection.size){
+    sheet.append(el("div",{class:"shead"}, el("h2",{}, "Edit freely")), el("p",{class:"note"}, "Tap a hex to change anything on it. Hold to add more hexes."));
+    return;
+  }
   if (!selection.size){   // waiting for a new group after "deselect all"
     sheet.append(el("div",{class:"shead"}, el("h2",{}, "Select hexes")),
       el("p",{class:"note"}, "Tap hexes to select a new group. Tap one again to drop it."));
@@ -1370,7 +1661,7 @@ function fillSheet(){
     return;
   }
   // header: category on the left, a size stepper on the right ( − 7 hexes + )
-  const sizing = !sheetForm && sheetCat !== "Markers" && canWrite;
+  const sizing = !sheetForm && sheetCat !== "Markers" && writable();
   const count = el("span",{class:"count"}, `${n} ${n===1?"hex":"hexes"}`);
   const stepper = sizing ? el("div",{class:"stepper", role:"group", "aria-label":"Selection size"},
       el("button",{type:"button", class:"step", "aria-label":"Shrink the selection", disabled: !canShrink() || null, onclick:shrink}, "−"),
@@ -1386,14 +1677,14 @@ function fillSheet(){
     el("div",{class:"stitle"}, el("h2",{}, sheetCat || "Selected"),
       n === 1 ? el("span",{class:"coord", "aria-label":`Hex ${parse(ids[0])[0]+1}, ${parse(ids[0])[1]+1}`}, `${parse(ids[0])[0]+1},${parse(ids[0])[1]+1}`) : null),
     stepper, reset));
-  if (!sheetCat){ sheet.append(rowsFor(ids)); if (!canWrite) sheet.append(el("p",{class:"note"}, "You can view this map but not change it.")); return; }
+  if (!sheetCat){ sheet.append(rowsFor(ids)); if (powersOn() && !mode && canWrite) sheet.append(el("p",{class:"note"}, "To change it, use a power or Edit freely.")); if (!canWrite) sheet.append(el("p",{class:"note"}, "You can view this map but not change it.")); return; }
   if (sheetCat === "Land") landOptions(ids);
   else if (sheetCat === "Natures") natureOptions(ids);
   else if (sheetCat === "Settled by") peopleOptions(ids);
   else markerOptions(ids);
 }
 function rowsFor(ids){
-  const ds = ids.map(id => view(id) || {}), n = ids.length, noLand = needsLand(ids);
+  const can = writable(), ds = ids.map(id => view(id) || {}), n = ids.length, noLand = needsLand(ids);
   const none = t => el("span",{class:"none"}, t);
   const allSame = f => ds.every(d => (d[f]??null) === (ds[0][f]??null));
   let land;
@@ -1410,18 +1701,18 @@ function rowsFor(ids){
   const ms = n === 1 ? (ds[0].m || []) : [];
   const mkV = noLand && !ms.length ? [none("Needs land first")] : ms.length ? ms.slice(0,6).map(m => markerIcon(m.k, m.color)) : [none("None")];
   const spoken = (label, value) => label + ": " + (label === "Markers" && ms.length && !noLand ? ms.map(markerName).join(", ") : value.map(v => typeof v === "string" ? v : (v.textContent || "")).join(" ").trim());
-  const row = (label, value, enabled) => el("button",{type:"button", class:"rowbtn", disabled: (!enabled || !canWrite) || null,
+  const row = (label, value, enabled) => el("button",{type:"button", class:"rowbtn", disabled: (!enabled || !can) || null,
       "aria-label": spoken(label, value), onclick:()=>{ sheetCat = label; sheetForm = null; renderSheet(); }},
-    el("span",{class:"rl"}, label), el("span",{class:"rv"}, value), canWrite && enabled ? el("span",{class:"chev","aria-hidden":"true"}, "›") : null);
+    el("span",{class:"rl"}, label), el("span",{class:"rv"}, value), can && enabled ? el("span",{class:"chev","aria-hidden":"true"}, "›") : null);
   const box = el("div",{class:"rows"});
   // River is a simple on/off for the selected hexes (a river runs over land)
   const rv = ds.filter(d => d.r).length, allR = rv === n;
-  const river = el("button",{type:"button", class:"rowbtn", role:"switch", "aria-checked": String(allR && n > 0), disabled: (noLand || !canWrite) || null,
+  const river = el("button",{type:"button", class:"rowbtn", role:"switch", "aria-checked": String(allR && n > 0), disabled: (noLand || !can) || null,
       "aria-label": noLand ? "River: needs land first" : `River: ${allR ? "on" : rv ? "on some" : "off"}`,
       onclick:()=>applyAll(ids, id=>setField(id,"r", allR ? null : true), allR ? "River removed." : "River added.")},
     el("span",{class:"rl"}, "River"),
     el("span",{class:"rv"}, noLand ? none("Needs land first") : allR ? "Yes" : rv ? none(`On ${rv} of ${n}`) : none("No")),
-    canWrite && !noLand ? el("span",{class:"track sm","aria-hidden":"true"}, el("span",{class:"knob"})) : null);
+    can && !noLand ? el("span",{class:"track sm","aria-hidden":"true"}, el("span",{class:"knob"})) : null);
   box.append(row("Land", land, true), river, row("Natures", natV, !noLand), row("Settled by", ppl, !noLand),
     n === 1 ? row("Markers", mkV, !noLand || ms.length > 0) : el("div",{class:"rowgap","aria-hidden":"true"}));
   // who last changed this hex, and when: a tap shows all of that player's work that turn
@@ -1602,12 +1893,16 @@ function moveMarkerTo(to){
 let confirmDiscard = false;
 function renderDraftBar(){
   const bar = $("draftBar"), rc = pendingRecolors(), all = combine(steps.length).size;
-  bar.hidden = !(hasSteps() || rc) || histIdx !== null || selection.size > 0 || regrouping; bar.textContent = "";
-  if (!hasSteps() && !rc) { confirmDiscard = false; return; }
-  const undoBtn = el("button",{type:"button", class:"btn", disabled: !undoStack.length || null, onclick:undo}, "Undo"),
+  const idle = powersOn() && canWrite && !mode;
+  bar.hidden = !(hasSteps() || rc || idle) || histIdx !== null || selection.size > 0 || regrouping || (powersOn() && !!mode); bar.textContent = "";
+  const powerRow = idle && !confirmDiscard ? el("div",{class:"powerrow"},
+    el("button",{type:"button", class: hasSteps() ? "btn" : "btn primary", onclick:choosePower}, "Use a power"),
+    el("button",{type:"button", class:"btn", onclick:() => enterPower("Edit")}, "Edit freely")) : null;
+  if (!hasSteps() && !rc) { confirmDiscard = false; if (powerRow) bar.append(powerRow); return; }
+  const undoBtn = el("button",{type:"button", class:"btn", disabled: !undoStack.length || null, onclick:() => undo()}, "Undo"),
     overBtn = el("button",{type:"button", class:"btn", onclick:()=>{ confirmDiscard=true; renderDraftBar(); }}, "Start over"),
-    publishBtn = label => el("button",{type:"button", class:"btn primary", id:"saveBtn", onclick:savePost}, label);
-  if (!stepsOn() && !confirmDiscard){
+    publishBtn = label => el("button",{type:"button", class:"btn primary", id:"saveBtn", "data-label":label, onclick:savePost}, label);
+  if (!powersOn() && !confirmDiscard){
     bar.append(el("span",{class:"what"}, el("span",{class:"dot","aria-hidden":"true"}), all ? `${all} ${all === 1 ? "hex" : "hexes"} changed, not published` : "Border colors changed, not published"),
       undoBtn, overBtn, el("span",{class:"grow"}), publishBtn("Publish post"));
     return;
@@ -1625,12 +1920,12 @@ function renderDraftBar(){
   bar.append(...[
     el("div",{class:"steprow"},
       el("button",{type:"button", class:"btn icon", "aria-label":"Previous step", disabled: cur === 0 || null, onclick:() => goStep(cur - 1)}, "‹"),
-      el("button",{type:"button", class:"stepname", onclick:pickPower},
-        el("strong",{}, el("span",{class:"dot","aria-hidden":"true"}), `Step ${cur+1} of ${steps.length} · `, st.power || "Choose power", " ▾"),
-        el("small",{}, rc && !all ? "Border colors changed" : sub.join(" · "))),
+      el("button",{type:"button", class:"stepname", "aria-label":`Step ${cur+1} of ${steps.length}: ${st.power || "Edit"}. Tap to carry on with it.`, onclick:() => enterPower(st.power || "Edit", true)},
+        el("strong",{}, el("span",{class:"dot","aria-hidden":"true"}), `Step ${cur+1} of ${steps.length} · `, !st.power || st.power === "Edit" ? "Edit freely" : st.power, " ›"),
+        el("small",{}, rc && !all ? "Border colors changed" : st.thing ? st.thing : sub.join(" · "))),
       el("button",{type:"button", class:"btn icon", "aria-label":"Next step", disabled: cur === steps.length - 1 || null, onclick:() => goStep(cur + 1)}, "›")),
     over ? el("p",{class:"stepwarn", role:"status"}, `⚠ ${n} hexes is more than one area (${area}) for ${st.power}.`) : null,
-    el("button",{type:"button", class:"btn", onclick:newStep}, "+ Step"), undoBtn, overBtn, el("span",{class:"grow"}), publishBtn("Publish")].filter(Boolean));
+    powerRow, undoBtn, overBtn, el("span",{class:"grow"}), publishBtn("Publish")].filter(Boolean));
 }
 function newPost(extra){
   return Object.assign({ id: "p" + Date.now().toString(36) + rid().slice(0,4), by: myId || deviceId, name: myName() || null }, extra);
@@ -1654,14 +1949,14 @@ async function savePost(){
   if (!all.size && !pendingRecolors()) return;
   if (backend && backend.needsName && !myName()) return withName(savePost);
   const post = newPost({ changes: wire(Object.fromEntries(all)) });
-  const used = steps.filter(stepSize).map(st => ({ power: st.power || "", hexes: Object.keys(st.ch) }));
-  if (used.length && stepsOn()) post.steps = used;
+  const used = steps.filter(stepSize).map(st => ({ power: st.power || "", hexes: Object.keys(st.ch), ...(st.thing ? {thing: st.thing} : {}) }));
+  if (used.length && powersOn()) post.steps = used;
   if (Object.keys(draftDefs.types).length) post.types = draftDefs.types;
   if (Object.keys(draftDefs.peoples).length) post.peoples = draftDefs.peoples;
   const btn = $("saveBtn"); if (btn) { btn.disabled = true; btn.textContent = "Publishing…"; }
   stateDue = post.id;          // set first: the post can come back on the live stream before publish returns
   try { await backend.publish(post); }
-  catch(e){ stateDue = null; if (btn){ btn.disabled=false; btn.textContent = stepsOn() ? "Publish" : "Publish post"; } toast(e && e.code==="invalid_argument" ? "You can view this map but not change it." : "Couldn't publish. Your changes are kept; try again."); return; }
+  catch(e){ stateDue = null; if (btn){ btn.disabled=false; btn.textContent = btn.dataset.label; } toast(e && e.code==="invalid_argument" ? "You can view this map but not change it." : "Couldn't publish. Your changes are kept; try again."); return; }
   clearSteps(); draftDefs = {types:{}, peoples:{}}; undoStack.length = 0; saveDraftLocal(); clearSelection(); renderDraftBar(); draw();
   toast("Published. Everyone can see it now."); say("Post published.");
 }
@@ -1675,7 +1970,7 @@ function saveDraftLocal(){ lsSet("soc-steps", JSON.stringify({steps, cur})); lsS
 function loadDraftLocal(){
   try { const v = JSON.parse(lsGet("soc-steps")||"null"); if (v && v.steps && v.steps.length){ steps = v.steps; cur = Math.min(v.cur || 0, steps.length - 1); } } catch(e){}
   try { const old = JSON.parse(lsGet("soc-draft")||"[]"); if (old.length && !hasSteps()) steps[0].ch = Object.fromEntries(old); localStorage.removeItem("soc-draft"); } catch(e){}
-  if (!stepsOn()) cur = steps.length - 1;
+  if (!powersOn()) cur = steps.length - 1;
   rebuildDraft();
   try { const d = JSON.parse(lsGet("soc-defs")||"null"); if (d && d.types && d.peoples) draftDefs = d; } catch(e){}
   applyDefs([draftDefs]);
@@ -1706,10 +2001,10 @@ const publishedPeople = pid => posts.some(p => p.peoples && p.peoples[pid]);
 const pendingRecolors = () => Object.keys(draftDefs.peoples).filter(publishedPeople).length;
 // lands, natures and peoples as published, plus this device's unpublished ones
 function rebuildDefs(){ customLand.clear(); customNat.clear(); peoples.clear(); applyDefs(posts); applyDefs([draftDefs]); }
-async function addPeople(name, color){
+async function addPeople(name, color, of){
   for (const [pid,p] of peoples) if (p.name.toLowerCase() === name.toLowerCase()) return pid;
-  const pid = rid(); peoples.set(pid, {name, color});
-  draftDefs.peoples[pid] = {name, color}; saveDraftLocal();
+  const pid = rid(), def = of ? {name, color, of} : {name, color}; peoples.set(pid, def);
+  draftDefs.peoples[pid] = def; saveDraftLocal();
   return pid;
 }
 
@@ -1721,7 +2016,7 @@ function openModal(title, body, opts){
   modal.querySelector(".mpanel").classList.toggle("tall", !!(opts && opts.tall));
   modal.classList.toggle("light", !!(opts && opts.light));     // a see-through backdrop, so the map can be watched while choosing
   lastFocus = document.activeElement; $("mTitle").textContent = title; const b = $("mBody"); b.textContent = ""; b.append(...[body].flat().filter(x => x != null && x !== false));
-  modal.hidden = false; $("mClose").focus();
+  modal.hidden = false; modal.openedAt = performance.now(); $("mClose").focus();
 }
 function closeModal(){ modal.hidden = true; updateHint(); if (lastFocus && lastFocus.focus) lastFocus.focus(); }
 $("mClose").onclick = slideClosed;
@@ -1739,7 +2034,8 @@ function slideClosed(){
   panel.style.transform = "translateY(100%)";
   slideClosed.timer = setTimeout(() => { slideClosed.timer = null; resetSlide(); closeModal(); }, 200);
 }
-modal.addEventListener("click", e => { if (e.target === modal) slideClosed(); });
+// a panel opened by a tap on the map must not be closed by that same tap's click landing on the backdrop
+modal.addEventListener("click", e => { if (e.target === modal && performance.now() - (modal.openedAt || 0) > 450) slideClosed(); });
 // swipe the panel down to close it (from the top of its list, so scrolling the list still works)
 {
   const panel = modal.querySelector(".mpanel"), body = $("mBody"); let d = null;
@@ -1908,7 +2204,10 @@ function switchRow(label, get, set){
 }
 const themeToggle = () => switchRow("Dark mode", isDark, on => setTheme(on ? "dark" : "light"));
 // turning steps off shows every step again and keeps them; new changes go on the last one
-const stepsToggle = () => switchRow("Steps (try it)", stepsOn, on => { lsSet("soc-steps-on", on ? "1" : "0"); if (!on) cur = steps.length - 1; rebuildDraft(); saveDraftLocal(); renderDraftBar(); draw(); });
+// turning powers off keeps every step and shows them all; new changes go on the last one
+const powersToggle = () => switchRow("Powers (try it)", powersOn, on => {
+  lsSet("soc-powers-on", on ? "1" : "0"); if (!on && mode) exitPower();
+  cur = steps.length - 1; rebuildDraft(); saveDraftLocal(); clearSelection(); renderDraftBar(); draw(); });
 // rulers are on unless this device turned them off
 // rulers are switched off for now; set RULERS_AVAILABLE to bring back the menu switch
 const RULERS_AVAILABLE = false;
@@ -1949,7 +2248,7 @@ $("menuBtn").onclick = () => {
   openModal("Menu", [
     RULERS_AVAILABLE ? rulersToggle() : null,
     themeToggle(),
-    stepsToggle(),
+    powersToggle(),
     item("History", posts.length ? `${posts.length} published ${posts.length===1?"post":"posts"}` : "No posts yet", openHistory),
     window.RULES_MD ? item("Rules", "How to play Songs of Creation", openRules) : null,
     item("Key", "What the colors and symbols mean", openKey),
@@ -2029,7 +2328,8 @@ function mapState(){
     if (h.r) o.river = true;
     if (h.p) o.people = (peoples.get(h.p) || {}).name || h.p;
     if (h.n && h.n.length) o.natures = h.n;
-    if (h.m && h.m.length) o.markers = h.m.map(m => ({shape: (MARKERS[m.k] || ["Marker"])[0], color: color(m.color), ...(m.label ? {label: m.label} : {})}));
+    if (h.w) o.wonder = h.w;
+    if (h.m && h.m.length) o.markers = h.m.map(m => ({shape: (MARKERS[m.k] || ["Marker"])[0], color: color(m.color), ...(m.label ? {label: m.label} : {}), ...(m.x ? {destroyed: true} : {})}));
     hexes[id] = o;
   }
   const last = posts[posts.length-1] || {}, t = nowTurn();

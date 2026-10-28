@@ -44,34 +44,134 @@ test.describe("drafts", () => {
   });
 });
 
-test.describe("steps", () => {
+test.describe("powers first", () => {
   test.beforeEach(async ({ app }) => {
     await app.open({ mock: { userId: "u_me" } });
-    await app.page.locator("#menuBtn").click();                       // steps are opt-in from the menu
-    await app.page.getByRole("switch", { name: "Steps (try it)" }).click();
+    await app.page.locator("#menuBtn").click();
+    await app.page.getByRole("switch", { name: "Powers (try it)" }).click();
     await app.page.locator("#mClose").click();
     await app.zoomIn();
   });
   const bar = app => app.page.locator("#draftBar");
+  const usePower = async (app, power) => { await bar(app).getByRole("button", { name: "Use a power" }).click(); await app.page.locator("#mBody").getByRole("button", { name: power, exact: true }).click(); };
 
-  test("a draft can be split into steps, stepped back through, and published with them", async ({ app }) => {
-    await app.setLand(16, 26, "Forest"); await app.done();
-    await bar(app).getByRole("button", { name: "+ Step" }).click();          // step 1 has changes: a new step, then its power
-    await app.page.locator("#mBody").getByRole("button", { name: "Shape Climate", exact: true }).click();
+  test("tapping a hex only shows it", async ({ app }) => {
+    await expect(bar(app).getByRole("button", { name: "Edit freely" })).toBeVisible();
+    await app.tapHex(16, 26);
+    await expect(app.page.locator("#sheet")).toContainText("To change it, use a power or Edit freely.");
+    await expect(app.row("Land")).toBeDisabled();
+  });
+
+  test("a power paints hexes as one step, and the steps go out with the post", async ({ app }) => {
+    await usePower(app, "Shape Land");
+    await app.button("Forest").click();
+    await app.tapHex(16, 26); await app.tapHex(17, 26); await app.tapHex(18, 26);
+    await expect(app.page.locator("#sheet")).toContainText("3 of 19");
+    await app.tapHex(18, 26);                                          // a second tap takes it off again
+    expect(await app.view("h18_26")).toBeNull();
+    await app.footer("Done").click();
+    await expect(bar(app)).toContainText("Step 1 of 1 · Shape Land");
+    await usePower(app, "Shape Climate");
+    await app.button("Deep").click();
+    await app.tapHex(16, 26);
+    expect((await app.view("h16_26")).n).toEqual(["Deep"]);
+    await app.footer("Done").click();
     await expect(bar(app)).toContainText("Step 2 of 2 · Shape Climate");
-    await app.setLand(18, 26, "Hills"); await app.done();
-    await expect(bar(app)).toContainText("1 hex of 19 in this step · 2 in all");
-    // back to step 1: step 2's hex is hidden until you come forward again
+    // stepping back hides the later step until you come forward again
     await bar(app).getByRole("button", { name: "Previous step" }).click();
     await expect(bar(app)).toContainText("later steps hidden");
-    expect(await app.view("h18_26")).toBeNull();
+    expect((await app.view("h16_26")).n).toBeUndefined();
     await bar(app).getByRole("button", { name: "Next step" }).click();
-    expect((await app.view("h18_26")).t).toBe("hills");
     await app.page.locator("#saveBtn").click();
-    await expect(bar(app)).toBeHidden();
-    const [post] = await app.page.evaluate(() => Object.entries(window.__mockStore.all()).filter(([k]) => k.startsWith("posts/")).map(([, v]) => v));
-    expect(post.changes).toMatchObject({ h16_26: { t: "forest" }, h18_26: { t: "hills" } });
-    expect(post.steps).toEqual([{ power: "", hexes: ["h16_26"] }, { power: "Shape Climate", hexes: ["h18_26"] }]);
+    await expect.poll(() => app.page.evaluate(() => Object.entries(window.__mockStore.all()).filter(([k]) => k.startsWith("posts/")).map(([, v]) => v.steps))).toEqual([[
+      { power: "Shape Land", hexes: ["h16_26", "h17_26"] }, { power: "Shape Climate", hexes: ["h16_26"] }]]);
+  });
+
+  test("create an ancestry, then settle next to it", async ({ app }) => {
+    await usePower(app, "Shape Land"); await app.button("Plains").click();
+    for (const c of [14, 15, 16, 17, 18]) await app.tapHex(c, 26);
+    await app.footer("Done").click();
+    await usePower(app, "Create Ancestry");
+    await app.page.locator("#otherName").fill("Elves");
+    await app.page.locator("#mBody").getByRole("button", { name: "Next" }).click();
+    await expect(app.page.locator("#sheet")).toContainText("Tap the hex where the Elves begin");
+    await app.tapHex(14, 26);                              // one tap spreads over the connected plains
+    await expect(app.page.locator("#sheet")).toContainText("5 of 19");
+    await app.tapHex(17, 26); await app.tapHex(18, 26);     // then hexes can be taken off (or added)
+    expect((await app.view("h18_26")).p).toBeUndefined();
+    await app.footer("Done").click();
+    await expect(app.page.locator("#mTitle")).toHaveText("Legends arise");
+    await app.page.locator("#mBody").getByRole("button", { name: "Not now" }).click();
+    await usePower(app, "Settle");                          // the only people is picked already
+    await expect(app.page.locator("#sheet")).toContainText("Tap a lit hex to settle the Elves there");
+    await app.tapHex(17, 26);                              // spreads over the plains they don't live in yet
+    expect((await app.view("h17_26")).p).toBe((await app.view("h15_26")).p);
+    expect((await app.view("h18_26")).p).toBe((await app.view("h15_26")).p);
+    await expect(app.page.locator("#sheet")).toContainText("2 of 19");
+    await app.footer("Done").click();
+    await expect(bar(app)).toContainText("Step 3 of 3 · Settle");
+  });
+
+  test("found a city, raise an army there, march it, build, and place a legend", async ({ app }) => {
+    const name = async v => { await app.page.locator("#thingName").fill(v); await app.page.locator("#mBody").getByRole("button", { name: "Place" }).click(); };
+    const things = async id => ((await app.view(id)) || {}).m || [];
+    await usePower(app, "Shape Land"); await app.button("Plains").click();
+    for (const c of [14, 15, 16, 17]) await app.tapHex(c, 26);
+    await app.footer("Done").click();
+    await usePower(app, "Create Ancestry");
+    await app.page.locator("#otherName").fill("Elves"); await app.page.locator("#mBody").getByRole("button", { name: "Next" }).click();
+    await app.tapHex(14, 26); await app.footer("Done").click();
+    await app.page.locator("#mBody").getByRole("button", { name: "Add a legend" }).click();   // a legend arises for each player who paid
+    await app.page.locator("#alignedTo").fill("Ash"); await name("The First Mother");
+    await app.page.locator("#mBody").getByRole("button", { name: "That's all" }).click();
+    expect(Object.values(await app.page.evaluate(() => window.__soc.state().draft)).flatMap(p => p.m || [])).toEqual([expect.objectContaining({ k: "legend", label: "The First Mother", aligned: "Ash" })]);
+    await usePower(app, "Found City");
+    await expect(app.page.locator("#sheet")).toContainText("where the Elves live");
+    await app.tapHex(15, 26); await name("Vgd");
+    expect(await things("h15_26")).toContainEqual(expect.objectContaining({ k: "city", label: "Vgd" }));
+    await expect(bar(app)).toContainText("Found City");
+    await usePower(app, "Raise Army"); await app.tapHex(15, 26); await name("The Host");
+    await usePower(app, "March Army"); await app.tapHex(15, 26);
+    await expect(app.page.locator("#sheet")).toContainText("Tap where The Host marches");
+    await app.tapHex(17, 26);
+    expect((await things("h17_26")).map(m => m.label)).toEqual(["The Host"]);
+    expect((await things("h15_26")).map(m => m.label)).toEqual(["The First Mother", "Vgd"]);
+    await usePower(app, "Build"); await app.tapHex(16, 26);
+    await expect(app.page.locator("#mBody")).toContainText("Built by");
+    await name("The Long Wall");
+    expect(await things("h16_26")).toEqual([expect.objectContaining({ k: "built", label: "The Long Wall", of: (await things("h15_26")).find(m => m.k === "city").id })]);
+    await usePower(app, "Create Legend"); await app.tapHex(14, 26); await name("The Grey Company");
+    await expect(bar(app)).toContainText("Step 7 of 7 · Create Legend");
+    await expect(bar(app)).toContainText("The Grey Company");
+    // Catastrophe: the army is crossed out, not removed
+    await usePower(app, "Catastrophe"); await app.button("Destroy a city, army or legend").click();
+    await app.tapHex(17, 26);
+    expect((await things("h17_26"))[0]).toMatchObject({ label: "The Host", x: true });
+    await app.button("Wipe land").click(); await app.tapHex(16, 26);
+    expect((await app.view("h16_26")).t).toBeUndefined();
+    await app.footer("Done").click();
+    // Exalt: one place, or the whole land form
+    await usePower(app, "Exalt"); await app.page.locator("#mBody").getByRole("button", { name: "The whole land form" }).click();
+    await app.tapHex(14, 26); await name("The Long Meadow");
+    expect((await app.view("h14_26")).w).toBe("The Long Meadow");
+    expect((await app.view("h15_26")).w).toBe("The Long Meadow");
+    await usePower(app, "Exalt"); await app.page.locator("#mBody").getByRole("button", { name: "One place in it" }).click();
+    await app.tapHex(17, 26); await name("The World Tree");
+    expect((await things("h17_26")).map(m => m.k)).toEqual(["army", "wonder"]);
+  });
+
+  test("a new people never placed is dropped when you leave", async ({ app }) => {
+    await usePower(app, "Create Ancestry");
+    await app.page.locator("#otherName").fill("Ghosts");
+    await app.page.locator("#mBody").getByRole("button", { name: "Next" }).click();
+    await app.footer("Done").click();
+    expect(await app.page.evaluate(() => JSON.parse(localStorage.getItem("soc-defs")).peoples)).toEqual({});
+  });
+
+  test("edit freely is today's full editing", async ({ app }) => {
+    await bar(app).getByRole("button", { name: "Edit freely" }).click();
+    await app.setLand(16, 26, "Hills"); await app.done();
+    expect((await app.view("h16_26")).t).toBe("hills");
   });
 });
 
