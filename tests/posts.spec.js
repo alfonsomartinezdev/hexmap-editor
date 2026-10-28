@@ -70,17 +70,25 @@ test.describe("powers first", () => {
     await app.tapHex(18, 26);                                          // a second tap takes it off again
     expect(await app.view("h18_26")).toBeNull();
     await app.footer("Done").click();
-    await expect(bar(app)).toContainText("Step 1 of 1 · Shape Land");
-    await usePower(app, "Shape Climate");
-    await app.button("Deep").click();
+    await expect(bar(app)).toContainText("Shape LandStep 1 of 1");
+    await usePower(app, "Shape Climate");                   // natures come from a picker, not a long strip
+    await app.page.locator("#mBody").getByRole("button", { name: "Deep", exact: true }).click();
     await app.tapHex(16, 26);
     expect((await app.view("h16_26")).n).toEqual(["Deep"]);
     await app.footer("Done").click();
-    await expect(bar(app)).toContainText("Step 2 of 2 · Shape Climate");
+    await expect(bar(app)).toContainText("Shape ClimateStep 2 of 2");
     // stepping back hides the later step until you come forward again
     await bar(app).getByRole("button", { name: "Previous step" }).click();
     await expect(bar(app)).toContainText("later steps hidden");
     expect((await app.view("h16_26")).n).toBeUndefined();
+    // carry on with step 1: add a hex to it, and Undo only takes back what's in that step
+    await bar(app).getByRole("button", { name: "Edit step" }).click();
+    await app.button("Forest").click(); await app.tapHex(18, 26);
+    await app.footer("Done").click();
+    expect((await app.view("h18_26")).t).toBe("forest");
+    await bar(app).getByRole("button", { name: "Undo" }).click();
+    expect(await app.view("h18_26")).toBeNull();
+    expect((await app.view("h17_26")).t).toBe("forest");
     await bar(app).getByRole("button", { name: "Next step" }).click();
     await app.page.locator("#saveBtn").click();
     await expect.poll(() => app.page.evaluate(() => Object.entries(window.__mockStore.all()).filter(([k]) => k.startsWith("posts/")).map(([, v]) => v.steps))).toEqual([[
@@ -109,7 +117,7 @@ test.describe("powers first", () => {
     expect((await app.view("h18_26")).p).toBe((await app.view("h15_26")).p);
     await expect(app.page.locator("#sheet")).toContainText("2 of 19");
     await app.footer("Done").click();
-    await expect(bar(app)).toContainText("Step 3 of 3 · Settle");
+    await expect(bar(app)).toContainText("SettleStep 3 of 3");
   });
 
   test("found a city, raise an army there, march it, build, and place a legend", async ({ app }) => {
@@ -141,7 +149,7 @@ test.describe("powers first", () => {
     await name("The Long Wall");
     expect(await things("h16_26")).toEqual([expect.objectContaining({ k: "built", label: "The Long Wall", of: (await things("h15_26")).find(m => m.k === "city").id })]);
     await usePower(app, "Create Legend"); await app.tapHex(14, 26); await name("The Grey Company");
-    await expect(bar(app)).toContainText("Step 7 of 7 · Create Legend");
+    await expect(bar(app)).toContainText("Create Legend · The Grey CompanyStep 7 of 7");
     await expect(bar(app)).toContainText("The Grey Company");
     // Catastrophe: the army is crossed out, not removed
     await usePower(app, "Catastrophe"); await app.button("Destroy a city, army or legend").click();
