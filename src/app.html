@@ -615,6 +615,34 @@ function destroyAt(id){
   if (live.length === 1) kill(live[0]);
   else openModal("Destroy which?", el("div",{class:"opts"}, live.map(m => el("button",{type:"button", class:"opt", onclick:() => kill(m)}, m.label || (MARKERS[m.k] || ["Marker"])[0]))));
 }
+// costs by age, from the Table of Powers
+const COST = {"Shape Land":[3,5,8], "Shape Climate":[2,4,6], "Rouse":[4,4,4], "Create Ancestry":[22,6,15], "Create Heritage":[12,4,10],
+  "Create Legend":[10,7,8], "Found City":[8,4,3], "Settle":[8,4,3], "Build":[6,4,2], "Raise Army":[6,4,2], "March Army":[4,3,2], "Exalt":[6,5,6], "Catastrophe":[10,10,10]};
+// the powers this turn used, one line each, ready to paste into Discord: **Shape Land(3):** Water
+function turnSummary(){
+  const lines = [];
+  for (const st of steps){
+    if (!stepSize(st) || !st.power || st.power === "Edit") continue;
+    const ps = Object.entries(st.ch), uniq = a => [...new Set(a)].join(", ");
+    let what = st.thing || "";
+    if (st.power === "Shape Land") what = uniq(ps.flatMap(([, p]) => [p.t ? landInfo(p.t).name : p.t === null ? "clear land" : null, p.r ? "river" : null]).filter(Boolean));
+    else if (st.power === "Shape Climate") what = uniq(ps.flatMap(([id, p]) => (p.n || []).filter(nm => !(((base.get(id) || {}).n) || []).includes(nm))));
+    else if (["Create Ancestry","Create Heritage","Settle"].includes(st.power)) what = uniq(ps.map(([, p]) => p.p && (peoples.get(p.p) || {}).name).filter(Boolean));
+    else if (st.power === "Catastrophe") what = uniq([...(ps.some(([, p]) => "t" in p) ? ["wipe land"] : []), ...(st.thing ? [st.thing] : [])]);
+    const cost = COST[st.power] ? `(${COST[st.power][age - 1]})` : "";
+    lines.push(`**${st.power}${cost}:** ${what}`.trim());
+  }
+  return lines.join("\n");
+}
+function showSummary(text){
+  const box = el("textarea",{id:"summary", readonly:true, rows: String(Math.min(10, text.split("\n").length + 1)), style:"box-sizing:border-box;width:100%;font:inherit;padding:10px;border-radius:10px;resize:none;border:2px solid var(--line);background:var(--raise);color:inherit"});
+  box.value = text;
+  const copy = el("button",{type:"button", class:"btn primary", onclick:async () => {
+    try { await navigator.clipboard.writeText(text); toast("Copied."); } catch(e){ box.focus(); box.select(); toast("Select and copy."); } }}, "Copy");
+  copy.className = "btn";
+  openModal("Publish?", [box, el("div",{class:"row"}, copy, el("span",{class:"grow"}),
+    el("button",{type:"button", class:"btn primary", onclick:publishPost}, "Publish"))]);
+}
 function exitPower(){
   const st = steps[cur];
   if (!stepSize(st)){
@@ -1949,10 +1977,17 @@ function askName(then){
   body.push(el("form",{class:"form", onsubmit:(e)=>{ e.preventDefault(); go(input.value); }}, input, el("div",{class:"row"}, el("button",{type:"submit", class:"btn primary"}, then ? "Continue" : "Save"))));
   openModal("Who's posting?", body);
 }
-async function savePost(){
+// with powers on, Publish first shows the powers used (to copy for Discord), then publishes
+function savePost(){
   const all = combine(steps.length);
   if (!all.size && !pendingRecolors()) return;
   if (backend && backend.needsName && !myName()) return withName(savePost);
+  const summary = powersOn() ? turnSummary() : "";
+  if (summary) showSummary(summary); else publishPost();
+}
+async function publishPost(){
+  closeModal();
+  const all = combine(steps.length);
   const post = newPost({ changes: wire(Object.fromEntries(all)) });
   const used = steps.filter(stepSize).map(st => ({ power: st.power || "", hexes: Object.keys(st.ch), ...(st.thing ? {thing: st.thing} : {}) }));   // not its undo history
   if (used.length && powersOn()) post.steps = used;

@@ -90,7 +90,10 @@ test.describe("powers first", () => {
     await expect(app.page.locator("#sheet")).toContainText("Shape Climate");
     expect((await app.view("h16_26")).n).toEqual(["Deep"]);
     await app.footer("Done").click();
+    // Publish shows the powers used first, ready to copy for Discord
     await app.page.locator("#saveBtn").click();
+    await expect(app.page.locator("#summary")).toHaveValue("**Shape Land(3):** Forest\n**Shape Climate(2):** Deep");
+    await app.page.locator("#mBody").getByRole("button", { name: "Publish" }).click();
     await expect.poll(() => app.page.evaluate(() => Object.entries(window.__mockStore.all()).filter(([k]) => k.startsWith("posts/")).map(([, v]) => v.steps))).toEqual([[
       { power: "Shape Land", hexes: ["h16_26", "h17_26"] }, { power: "Shape Climate", hexes: ["h16_26"] }]]);
   });
