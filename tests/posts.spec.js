@@ -96,6 +96,13 @@ test.describe("powers first", () => {
     await app.page.locator("#mBody").getByRole("button", { name: "Publish" }).click();
     await expect.poll(() => app.page.evaluate(() => Object.entries(window.__mockStore.all()).filter(([k]) => k.startsWith("posts/")).map(([, v]) => v.steps))).toEqual([[
       { power: "Shape Land", hexes: ["h16_26", "h17_26"] }, { power: "Shape Climate", hexes: ["h16_26"] }]]);
+    // a published post can be copied again from History
+    await app.page.locator("#menuBtn").click();
+    await app.page.locator("#mBody").getByRole("button", { name: /^History/ }).click();
+    await expect(app.page.locator("#mBody .histrow")).toHaveCount(1);
+    await app.page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
+    await app.page.locator("#mBody .histrow").getByRole("button", { name: /^Copy/ }).click();
+    expect(await app.page.evaluate(() => navigator.clipboard.readText())).toBe("**Shape Land(3):** Forest\n**Shape Climate(2):** Deep");
   });
 
   test("create an ancestry, then settle next to it", async ({ app }) => {

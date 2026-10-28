@@ -151,6 +151,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;-webkit-touch-call
 .opt.brush[aria-pressed="true"]{border:2px solid var(--fg);background:var(--accent);color:var(--accent-ink);font-weight:700}
 .sheet .lead{margin:0;font-weight:700;font-size:1rem}
 .count.over{color:var(--danger);font-weight:700}
+.histrow{display:flex;gap:8px;align-items:center}
 .stepwarn{flex:1 1 100%;margin:0;font-size:.85rem;font-weight:700}
 .dot{display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--draft);margin-right:6px;vertical-align:middle}
 
@@ -618,27 +619,29 @@ function destroyAt(id){
 // costs by age, from the Table of Powers
 const COST = {"Shape Land":[3,5,8], "Shape Climate":[2,4,6], "Rouse":[4,4,4], "Create Ancestry":[22,6,15], "Create Heritage":[12,4,10],
   "Create Legend":[10,7,8], "Found City":[8,4,3], "Settle":[8,4,3], "Build":[6,4,2], "Raise Army":[6,4,2], "March Army":[4,3,2], "Exalt":[6,5,6], "Catastrophe":[10,10,10]};
-// the powers this turn used, one line each, ready to paste into Discord: **Shape Land(3):** Water
-function turnSummary(){
+// the powers a turn used, one line each, ready to paste into Discord: **Shape Land(3):** Water
+// list: steps ({power, ch, thing}); prior: the map before them (hex -> state); a: the age they were in
+function turnSummary(list = steps, prior = base, a = age){
   const lines = [];
-  for (const st of steps){
+  for (const st of list){
     if (!stepSize(st) || !st.power || st.power === "Edit") continue;
     const ps = Object.entries(st.ch), uniq = a => [...new Set(a)].join(", ");
     let what = st.thing || "";
-    if (st.power === "Shape Land") what = uniq(ps.flatMap(([, p]) => [p.t ? landInfo(p.t).name : p.t === null ? "clear land" : null, p.r ? "river" : null]).filter(Boolean));
-    else if (st.power === "Shape Climate") what = uniq(ps.flatMap(([id, p]) => (p.n || []).filter(nm => !(((base.get(id) || {}).n) || []).includes(nm))));
+    if (st.power === "Shape Land") what = uniq(ps.flatMap(([, p]) => [p.t ? landInfo(p.t).name : "t" in p ? "clear land" : null, p.r ? "river" : null]).filter(Boolean));
+    else if (st.power === "Shape Climate") what = uniq(ps.flatMap(([id, p]) => (p.n || []).filter(nm => !(((prior.get(id) || {}).n) || []).includes(nm))));
     else if (["Create Ancestry","Create Heritage","Settle"].includes(st.power)) what = uniq(ps.map(([, p]) => p.p && (peoples.get(p.p) || {}).name).filter(Boolean));
     else if (st.power === "Catastrophe") what = uniq([...(ps.some(([, p]) => "t" in p) ? ["wipe land"] : []), ...(st.thing ? [st.thing] : [])]);
-    const cost = COST[st.power] ? `(${COST[st.power][age - 1]})` : "";
+    const cost = COST[st.power] ? `(${COST[st.power][a - 1]})` : "";
     lines.push(`**${st.power}${cost}:** ${what}`.trim());
   }
   return lines.join("\n");
 }
-function showSummary(text){
+function showSummary(text, copyOnly){
   const box = el("textarea",{id:"summary", readonly:true, rows: String(Math.min(10, text.split("\n").length + 1)), style:"box-sizing:border-box;width:100%;font:inherit;padding:10px;border-radius:10px;resize:none;border:2px solid var(--line);background:var(--raise);color:inherit"});
   box.value = text;
   const copy = el("button",{type:"button", class:"btn primary", onclick:async () => {
     try { await navigator.clipboard.writeText(text); toast("Copied."); } catch(e){ box.focus(); box.select(); toast("Select and copy."); } }}, "Copy");
+  if (copyOnly) return openModal("Powers used", [box, el("div",{class:"row"}, el("span",{class:"grow"}), copy)]);
   copy.className = "btn";
   openModal("Publish?", [box, el("div",{class:"row"}, copy, el("span",{class:"grow"}),
     el("button",{type:"button", class:"btn primary", onclick:publishPost}, "Publish"))]);
@@ -2129,14 +2132,22 @@ async function loadNames(ids){
   try { const ps = await user.profiles(need); for (const i of need) if (ps && ps[i] && ps[i].name) names.set(i, ps[i].name); } catch(e){}
 }
 const when = t => new Date(t).toLocaleString([], {month:"short", day:"numeric", hour:"numeric", minute:"2-digit"});
+function postSummary(i){
+  const p = posts[i]; if (!p.steps || !p.steps.length) return "";
+  const list = p.steps.map(st => ({power: st.power, thing: st.thing, ch: Object.fromEntries((st.hexes || []).filter(id => (p.changes || {})[id]).map(id => [id, p.changes[id]]))}));
+  return turnSummary(list, fold(posts.slice(0, i)), turnAt(p.at || 0, agePeriods()).age);
+}
+async function copyText(text){ try { await navigator.clipboard.writeText(text); toast("Copied."); } catch(e){ showSummary(text, true); } }
 async function openHistory(){
   await loadNames([...new Set(posts.map(p=>p.by))]);
   const list = el("div",{class:"keylist"});
   if (!posts.length) list.append(el("p",{class:"empty"}, "No posts yet. Saved posts appear here, newest first."));
   for (let i = posts.length-1; i >= 0; i--){
     const p = posts[i], n = Object.keys(p.changes||{}).length;
-    list.append(el("button",{type:"button", class:"link", "aria-current": histIdx===i ? "true" : null, onclick:()=>{ showHistory(i); closeModal(); }},
-      el("strong",{}, postName(p)), n ? "" : p.world && p.world.newMap ? "Started a new map" : p.world && AGES[p.world.age] ? AGES[p.world.age][0] : "", el("span",{class:"when"}, when(p.at))));
+    const sum = postSummary(i);
+    const row = el("button",{type:"button", class:"link", style:"flex:1", "aria-current": histIdx===i ? "true" : null, onclick:()=>{ showHistory(i); closeModal(); }},
+      el("strong",{}, postName(p)), n ? "" : p.world && p.world.newMap ? "Started a new map" : p.world && AGES[p.world.age] ? AGES[p.world.age][0] : "", el("span",{class:"when"}, when(p.at)));
+    list.append(sum ? el("div",{class:"histrow"}, row, el("button",{type:"button", class:"btn", "aria-label":`Copy the powers ${postName(p)} used`, onclick:() => copyText(sum)}, "Copy")) : row);
   }
   openModal("History", [histIdx !== null ? el("button",{type:"button", class:"btn", onclick:()=>{ showHistory(null); closeModal(); }}, "Back to the map now") : null, list].filter(Boolean));
 };
