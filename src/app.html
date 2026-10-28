@@ -429,7 +429,7 @@ function applyDefs(list){
 const same = (a,b) => JSON.stringify(a??null) === JSON.stringify(b??null);
 function view(id){ return histIdx!==null ? (histState.get(id)||null) : merge(base.get(id), draft.get(id)); }
 /* ---- steps: a draft is a list of steps, each one use of a power (Shape Land, Shape Climate…).
-   The map shows every step; the one you're on is outlined. Where two steps change the same hex, the later one wins. ---- */
+   Like any stepper, the map shows your steps up to the one you're on. Where two steps change the same hex, the later one wins. ---- */
 const AREA_POWERS = new Set(["Shape Land","Shape Climate","Catastrophe","Settle","Create Ancestry","Rouse"]);   // one use covers up to one area
 // a step: which power, its changes (hex -> patch), and for some powers the new people it made or the thing it named
 const emptyStep = () => ({power:null, ch:{}});
@@ -457,7 +457,7 @@ function combine(n){                 // hex -> patch against the published map, 
   for (const id of ids){ const p = patchUpTo(id, n), b = base.get(id) || {}; for (const k of Object.keys(p)) if (same(b[k], p[k])) delete p[k]; if (Object.keys(p).length) out.set(id, p); }
   return out;
 }
-function rebuildDraft(){ draft.clear(); for (const [k,v] of combine(steps.length)) draft.set(k, v); }
+function rebuildDraft(){ draft.clear(); for (const [k,v] of combine(cur + 1)) draft.set(k, v); }
 const hasSteps = () => steps.some(st => stepSize(st)) || steps.length > 1;
 function setField(id, field, value){
   if (Array.isArray(value) && !value.length) value = null;
@@ -515,13 +515,13 @@ function startPlacePower(pw){
   if (pw === "Shape Climate") return pickNature();
   if (pw === "Exalt") openModal("Exalt", el("div",{class:"opts"},
       el("button",{type:"button", class:"opt", onclick:() => { mode.whole = false; closeModal(); renderSheet(); }}, "One hex"),
-      el("button",{type:"button", class:"opt", onclick:() => { mode.whole = true; closeModal(); renderSheet(); }}, "Whole land form")));
+      el("button",{type:"button", class:"opt", onclick:() => { mode.whole = true; closeModal(); renderSheet(); }}, "Land form")));
 }
-// the land form a hex belongs to: every connected hex of the same land
+// an exalted land form: the connected hexes of the same land, nearest first, up to one area or the end of that land
 function landFormOf(id){
-  const t = (view(id) || {}).t, out = [id], seen = new Set([id]);
-  for (let i = 0; i < out.length; i++){ const [c,r] = parse(out[i]);
-    for (const [nc,nr] of edgeNeighbors(c,r)){ const n = hid(nc,nr); if (inB(nc,nr) && !seen.has(n) && (view(n) || {}).t === t){ seen.add(n); out.push(n); } } }
+  const t = (view(id) || {}).t, area = AGES[age][1], out = [id], seen = new Set([id]);
+  for (let i = 0; i < out.length && out.length < area; i++){ const [c,r] = parse(out[i]);
+    for (const [nc,nr] of edgeNeighbors(c,r)){ if (out.length >= area) break; const n = hid(nc,nr); if (inB(nc,nr) && !seen.has(n) && (view(n) || {}).t === t){ seen.add(n); out.push(n); } } }
   return out;
 }
 // a small form for a name, with anything else the thing needs above it

@@ -77,10 +77,10 @@ test.describe("powers first", () => {
     expect((await app.view("h16_26")).n).toEqual(["Deep"]);
     await app.footer("Done").click();
     await expect(bar(app)).toContainText("Shape ClimateStep 2 of 2");
-    // going back to step 1 still shows everything
+    // back to step 1: like any stepper, step 2 isn't shown until you go forward again
     await bar(app).getByRole("button", { name: "Previous step" }).click();
     await expect(bar(app)).toContainText("Shape LandStep 1 of 2");
-    expect((await app.view("h16_26")).n).toEqual(["Deep"]);
+    expect((await app.view("h16_26")).n).toBeUndefined();
     // carry on with step 1: add a hex to it, and Undo only takes back what's in that step
     await bar(app).getByRole("button", { name: "Edit step" }).click();
     await app.button("Forest").click(); await app.tapHex(18, 26);
@@ -140,7 +140,7 @@ test.describe("powers first", () => {
     await expect(bar(app)).toContainText("Found City");
     await usePower(app, "Raise Army"); await app.tapHex(15, 26); await name("The Host");
     await usePower(app, "March Army"); await app.tapHex(15, 26);
-    await expect(app.page.locator("#sheet")).toContainText("Tap where The Host marches");
+    await expect(app.page.locator("#sheet")).toContainText("Tap where The Host goes");
     await app.tapHex(17, 26);
     expect((await things("h17_26")).map(m => m.label)).toEqual(["The Host"]);
     expect((await things("h15_26")).map(m => m.label)).toEqual(["The First Mother", "Vgd"]);
@@ -159,7 +159,7 @@ test.describe("powers first", () => {
     expect((await app.view("h16_26")).t).toBeUndefined();
     await app.footer("Done").click();
     // Exalt: one place, or the whole land form
-    await usePower(app, "Exalt"); await app.page.locator("#mBody").getByRole("button", { name: "Whole land form" }).click();
+    await usePower(app, "Exalt"); await app.page.locator("#mBody").getByRole("button", { name: "Land form" }).click();
     await app.tapHex(14, 26); await name("The Long Meadow");
     expect((await app.view("h14_26")).w).toBe("The Long Meadow");
     expect((await app.view("h15_26")).w).toBe("The Long Meadow");
