@@ -183,6 +183,12 @@ test.describe("powers first", () => {
     expect(await app.page.evaluate(() => JSON.parse(localStorage.getItem("soc-defs")).peoples)).toEqual({});
   });
 
+  test("the powers list groups repeats: Shape Land(3x2)", async ({ app }) => {
+    for (const [land, c] of [["Water", 14], ["Forest", 16]]){ await usePower(app, "Shape Land"); await app.button(land).click(); await app.tapHex(c, 26); await app.footer("Done").click(); }
+    await app.page.locator("#saveBtn").click();
+    await expect(app.page.locator("#summary")).toHaveValue("**Shape Land(3x2):** Water, Forest");
+  });
+
   test("edit freely is today's full editing", async ({ app }) => {
     await bar(app).getByRole("button", { name: "Edit freely" }).click();
     await app.setLand(16, 26, "Hills"); await app.done();
