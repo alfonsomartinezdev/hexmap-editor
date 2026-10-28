@@ -151,6 +151,8 @@ canvas{display:block;width:100%;height:100%;touch-action:none;-webkit-touch-call
 .opt.brush[aria-pressed="true"]{border:2px solid var(--fg);background:var(--accent);color:var(--accent-ink);font-weight:700}
 .sheet .lead{margin:0;font-weight:700;font-size:1rem}
 .count.over{color:var(--danger);font-weight:700}
+.opt[disabled]{opacity:.55;cursor:default}
+.opt small.why{display:block;font-size:.78rem;color:var(--muted)}
 .histrow{display:flex;gap:8px;align-items:center}
 .stepwarn{flex:1 1 100%;margin:0;font-size:.85rem;font-weight:700}
 .dot{display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--draft);margin-right:6px;vertical-align:middle}
@@ -458,7 +460,8 @@ function combine(n){                 // hex -> patch against the published map, 
   return out;
 }
 function rebuildDraft(){ draft.clear(); for (const [k,v] of combine(cur + 1)) draft.set(k, v); }
-const hasSteps = () => steps.some(st => stepSize(st)) || steps.length > 1;
+const stepUsed = st => stepSize(st) > 0 || (!!st.thing && !st.unnamed);   // a legend kept off the map is a step with no hexes
+const hasSteps = () => steps.some(stepUsed) || steps.length > 1;
 function setField(id, field, value){
   if (Array.isArray(value) && !value.length) value = null;
   const before = merge(base.get(id), patchUpTo(id, cur)) || {}, ch = steps[cur].ch, p = {...(ch[id] || {})};
@@ -469,7 +472,7 @@ function setField(id, field, value){
 // moving between steps opens the step you land on, ready to change (an empty step you leave behind goes away)
 function goStep(i){
   const target = steps[Math.max(0, Math.min(steps.length - 1, i))];
-  if (mode && !stepSize(steps[cur]) && steps.length > 1){ if (steps[cur].people){ delete draftDefs.peoples[steps[cur].people]; rebuildDefs(); } steps.splice(cur, 1); }
+  if (mode && !stepUsed(steps[cur]) && steps.length > 1){ if (steps[cur].people){ delete draftDefs.peoples[steps[cur].people]; rebuildDefs(); } steps.splice(cur, 1); }
   mode = null; cur = steps.indexOf(target); rebuildDraft();
   enterPower(target.power || "Edit", true);
   say(`Step ${cur+1} of ${steps.length}, ${target.power || "Edit freely"}.`);
@@ -484,7 +487,7 @@ function enterPower(power, resume){
   closeModal(); clearSelection();
   if (!resume){
     const last = steps[steps.length - 1];
-    if (stepSize(last) && !(power === "Edit" && last.power === "Edit")) steps.push(emptyStep());
+    if (stepUsed(last) && !(power === "Edit" && last.power === "Edit")) steps.push(emptyStep());
     cur = steps.length - 1; steps[cur].power = power; rebuildDraft();
   }
   mode = {power: steps[cur].power || power, resumed: !!resume}; steps[cur].power = mode.power; brush = startBrush(); brushOptions.scroll = 0;
@@ -526,6 +529,15 @@ function startPlacePower(pw){
   if (pw === "March Army" && !allThings("army").length){ toast("There are no armies yet. Raise one first."); return; }
   enterPower(pw);
   if (pw === "Shape Climate") return pickNature();
+  if (pw === "Create Legend"){
+    const input = el("input",{id:"thingName", placeholder:"Name, such as The Grey Company", autocomplete:"off"});
+    const named = () => { const v = input.value.trim(); if (!v){ input.focus(); toast("Give it a name."); } return v; };
+    openModal("A legend", [el("label",{for:"thingName"}, "Name"), input, el("div",{class:"row"},
+      el("button",{type:"button", class:"btn", onclick:() => { const v = named(); if (!v) return; snapshot(); steps[cur].thing = v; closeModal(); exitPower(); toast(`${v} is a legend.`); }}, "Not on the map"),
+      el("span",{class:"grow"}),
+      el("button",{type:"button", class:"btn primary", onclick:() => { const v = named(); if (!v) return; mode.legend = v; closeModal(); renderSheet(); }}, "Place on the map"))]);
+    setTimeout(() => input.focus(), 50); return;
+  }
   if (pw === "Exalt") openModal("Exalt", el("div",{class:"opts"},
       el("button",{type:"button", class:"opt", onclick:() => { mode.whole = false; closeModal(); renderSheet(); }}, "One hex"),
       el("button",{type:"button", class:"opt", onclick:() => { closeModal(); mode.whole = true; brush = {k:"wonder", v:"New wonder"}; steps[cur].unnamed = true; renderSheet(); draw(); }}, "Land form")));
@@ -585,7 +597,8 @@ function placeAt(id){
     if (mode.whole) return paintWonder(id, d);
     nameThing("A wonder", "Name, such as The World Tree", null, nm => addThing(id, {k:"wonder", label:nm, color:"#e6c440"}));
   } else if (pw === "Create Legend"){
-    nameThing("A legend", "Name, such as The Grey Company", null, nm => addThing(id, {k:"legend", label:nm, color:"#e6c440"}));
+    if (!mode.legend) return;                                      // the name comes first; nothing to place yet
+    const nm = mode.legend; mode.legend = null; addThing(id, {k:"legend", label:nm, color:"#e6c440"});
   }
 }
 // where the power in use can reach, lit up on the map
@@ -624,7 +637,7 @@ const COST = {"Shape Land":[3,5,8], "Shape Climate":[2,4,6], "Rouse":[4,4,4], "C
 function turnSummary(list = steps, prior = base, a = age){
   const lines = new Map();            // "power|what" -> {pw, what, n}, in the order they were first used
   for (const st of list){
-    if (!stepSize(st) || !st.power || st.power === "Edit") continue;
+    if (!stepUsed(st) || !st.power || st.power === "Edit") continue;
     const ps = Object.entries(st.ch), uniq = a => [...new Set(a)].join(", ");
     let what = st.thing || "";
     if (st.power === "Shape Land") what = uniq(ps.flatMap(([, p]) => [p.t ? landInfo(p.t).name : "t" in p ? "clear land" : null, p.r ? "river" : null]).filter(Boolean));
@@ -664,16 +677,24 @@ function finishPower(){
 }
 function exitPower(){
   const st = steps[cur];
-  if (!stepSize(st)){
+  if (!stepUsed(st)){
     if (st.people){ delete draftDefs.peoples[st.people]; rebuildDefs(); }     // a people made but never placed goes away again
     if (steps.length > 1){ steps.splice(cur, 1); cur = steps.length - 1; } else steps[0] = emptyStep();
     rebuildDraft();
   }
   mode = null; brush = null; clearSelection(); afterEdit();
 }
+function needs(pw){
+  if (["Create Heritage","Settle","Found City"].includes(pw) && !peoples.size) return "Needs a people first";
+  if (pw === "Raise Army" && !allThings("city").length) return "Needs a city first";
+  if (pw === "March Army" && !allThings("army").length) return "Needs an army first";
+  return null;
+}
 function choosePower(){
   const body = [], go = pw => () => PEOPLE_POWERS.has(pw) ? startPeoplePower(pw) : ASK_FIRST.has(pw) ? startPlacePower(pw) : enterPower(pw);
-  for (const [group, list] of PAINT_POWERS) body.push(el("p",{class:"sub"}, group), el("div",{class:"opts"}, list.map(pw => el("button",{type:"button", class:"opt", onclick:go(pw)}, pw))));
+  // a power that can't be used yet is shown greyed out, with what it needs, right where you'd tap it
+  for (const [group, list] of PAINT_POWERS) body.push(el("p",{class:"sub"}, group), el("div",{class:"opts"}, list.map(pw => { const why = needs(pw);
+    return el("button",{type:"button", class:"opt", disabled: why ? true : null, onclick:go(pw)}, el("span",{}, pw, why ? el("small",{class:"why"}, why) : null)); })));
   body.push(el("p",{class:"note"}, "For anything else, use Edit freely."));
   openModal("Use a power", body);
 }
@@ -1672,7 +1693,7 @@ function fillSheet(){
     if (PLACE_POWERS.has(mode.power)){
       const who = brush && brush.v && peoples.get(brush.v);
       const hint = {"Found City": !who ? "Whose city?" : "Tap a hex for the city.", "Raise Army": "Tap a city.",
-        "March Army": mode.army ? `Tap where ${mode.army.m.label} goes.` : "Tap an army.", "Build": "Tap a hex.", "Create Legend": "Tap a hex.",
+        "March Army": mode.army ? `Tap where ${mode.army.m.label} goes.` : "Tap an army.", "Build": "Tap a hex.", "Create Legend": mode.legend ? `Tap where ${mode.legend} is.` : "",
         "Exalt": !mode.whole ? "Tap a hex." : stepSize(steps[cur]) ? "Tap hexes to add or remove." : "Tap the land form."}[mode.power];
       const n = stepSize(steps[cur]), area = AGES[age][1], painting = mode.whole && brush && brush.k === "wonder";
       sheet.append(el("div",{class:"shead"}, stepArrows()[0], el("div",{class:"stitle"}, el("h2",{}, mode.power), steps.length > 1 ? el("span",{class:"coord"}, `step ${cur+1} of ${steps.length}`) : null),
@@ -1692,7 +1713,8 @@ function fillSheet(){
       : mode.power === "Create Heritage" ? "Tap hexes where they live."
       : mode.power === "Create Ancestry" && !n ? "Tap where they begin."
       : "Tap hexes to add or remove.";
-    sheet.append(strip, el("p",{class: PEOPLE_POWERS.has(mode.power) && brush && !n ? "lead" : "note"}, hint));
+    // a row with only one choice (the people you're painting with) is nothing to choose: leave it out
+    sheet.append(strip.children.length > 1 || !brush ? strip : "", el("p",{class: PEOPLE_POWERS.has(mode.power) && brush && !n ? "lead" : "note"}, hint));
     strip.scrollLeft = x; requestAnimationFrame(() => { const on = strip.querySelector('[aria-pressed="true"]'); if (on) on.scrollIntoView({inline:"nearest", block:"nearest"}); });
     strip.onscroll = () => { brushOptions.scroll = strip.scrollLeft; };   // keep the strip where it was between taps
     return;
@@ -1998,7 +2020,7 @@ function askName(then){
 // with powers on, Publish first shows the powers used (to copy for Discord), then publishes
 function savePost(){
   const all = combine(steps.length);
-  if (!all.size && !pendingRecolors()) return;
+  if (!all.size && !pendingRecolors() && !steps.some(stepUsed)) return;
   if (backend && backend.needsName && !myName()) return withName(savePost);
   const summary = powersOn() ? turnSummary() : "";
   if (summary) showSummary(summary); else publishPost();
@@ -2007,7 +2029,7 @@ async function publishPost(){
   closeModal();
   const all = combine(steps.length);
   const post = newPost({ changes: wire(Object.fromEntries(all)) });
-  const used = steps.filter(stepSize).map(st => ({ power: st.power || "", hexes: Object.keys(st.ch), ...(st.thing ? {thing: st.thing} : {}) }));   // not its undo history
+  const used = steps.filter(stepUsed).map(st => ({ power: st.power || "", hexes: Object.keys(st.ch), ...(st.thing ? {thing: st.thing} : {}) }));   // not its undo history
   if (used.length && powersOn()) post.steps = used;
   if (Object.keys(draftDefs.types).length) post.types = draftDefs.types;
   if (Object.keys(draftDefs.peoples).length) post.peoples = draftDefs.peoples;

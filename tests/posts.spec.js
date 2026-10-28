@@ -152,7 +152,9 @@ test.describe("powers first", () => {
     await expect(app.page.locator("#mBody")).toContainText("Built by");
     await name("The Long Wall");
     expect(await things("h16_26")).toEqual([expect.objectContaining({ k: "built", label: "The Long Wall", of: (await things("h15_26"))[0].id })]);
-    await usePower(app, "Create Legend"); await app.tapHex(14, 26); await name("The Grey Company");
+    await usePower(app, "Create Legend");                              // a legend is named first, then placed (or not)
+    await app.page.locator("#thingName").fill("The Grey Company"); await app.page.locator("#mBody").getByRole("button", { name: "Place on the map" }).click();
+    await app.tapHex(14, 26);
     await expect(bar(app)).toContainText("Create Legend · The Grey CompanyStep 7 of 7");
     await expect(bar(app)).toContainText("The Grey Company");
     // Catastrophe: the army is crossed out, not removed
@@ -173,6 +175,14 @@ test.describe("powers first", () => {
     await usePower(app, "Exalt"); await app.page.locator("#mBody").getByRole("button", { name: "One hex" }).click();
     await app.tapHex(17, 26); await name("The World Tree");
     expect((await things("h17_26")).map(m => m.k)).toEqual(["army", "wonder"]);
+  });
+
+  test("a legend can stay off the map and still counts as a step", async ({ app }) => {
+    await usePower(app, "Create Legend");
+    await app.page.locator("#thingName").fill("The Wanderer"); await app.page.locator("#mBody").getByRole("button", { name: "Not on the map" }).click();
+    await expect(bar(app)).toContainText("Create Legend · The Wanderer");
+    await app.page.locator("#saveBtn").click();
+    await expect(app.page.locator("#summary")).toHaveValue("**Create Legend(10):** The Wanderer");
   });
 
   test("a new people never placed is dropped when you leave", async ({ app }) => {
