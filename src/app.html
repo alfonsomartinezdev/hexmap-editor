@@ -370,7 +370,7 @@ let histIdx = null, histState = null;
 const customLand = new Map();   // key "x-<id>" -> {name,color}
 const customNat = new Map();    // name -> symbol
 const peoples = new Map();      // id -> {name,color}
-const undoStack = [];
+
 // "Tap a hex to change it" shows on a first visit only: it's remembered (cookie and storage) as soon as it has been seen,
 // and it goes away at the first touch of the map
 let hinted = false;
@@ -429,9 +429,8 @@ function applyDefs(list){
 const same = (a,b) => JSON.stringify(a??null) === JSON.stringify(b??null);
 function view(id){ return histIdx!==null ? (histState.get(id)||null) : merge(base.get(id), draft.get(id)); }
 /* ---- steps: a draft is a list of steps, each one use of a power (Shape Land, Shape Climate…).
-   The map shows your steps up to the one you're on, so you can step back and forth before you publish.
-   Where two steps change the same hex, the later one wins. `draft` is always the combined patch up to the current step. ---- */
-const AREA_POWERS = new Set(["Shape Land","Shape Climate","Catastrophe","Settle","Create Ancestry","Rouse"]);   // one use covers up to one area
+   Like any stepper, the map shows your steps up to the one you're on. Where two steps change the same hex, the later one wins. ---- */
+const AREA_POWERS = new Set(["Shape Land","Shape Climate","Catastrophe","Settle","Create Ancestry","Rouse","Exalt"]);   // one use covers up to one area
 // a step: which power, its changes (hex -> patch), and for some powers the new people it made or the thing it named
 const emptyStep = () => ({power:null, ch:{}});
 // powers (opt-in from the menu for now): tapping a hex only shows it; each change is a step, made through
@@ -445,6 +444,7 @@ const PEOPLE_POWERS = new Set(["Create Ancestry","Create Heritage","Settle"]);
 const AGE_FIRST = {1: ["Shape Land","Shape Climate","Exalt"], 2: ["Create Ancestry","Settle","Create Heritage","Found City"], 3: ["Found City","Build","Raise Army","March Army","Create Legend","Catastrophe"]};
 // powers that put one named thing on the map: a city, an army, something built, a legend. One tap, a name, and the step is done.
 const PLACE_POWERS = new Set(["Found City","Build","Raise Army","March Army","Create Legend","Exalt"]);
+const ASK_FIRST = new Set([...PLACE_POWERS, "Shape Climate"]);     // powers that ask something before you tap
 const THINGS = ["city","army","built","legend","wonder"];
 function* everyHex(){ for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) yield hid(c,r); }
 const thingsAt = (id, k) => ((view(id) || {}).m || []).filter(m => m.k === k && !m.x);
@@ -473,13 +473,17 @@ function enterPower(power, resume){
   closeModal(); clearSelection();
   if (!resume){
     const last = steps[steps.length - 1];
-    if (stepSize(last) && !(power === "Edit" && last.power === "Edit")){ snapshot(); steps.push(emptyStep()); }
+    if (stepSize(last) && !(power === "Edit" && last.power === "Edit")) steps.push(emptyStep());
     cur = steps.length - 1; steps[cur].power = power; rebuildDraft();
   }
-  mode = {power: steps[cur].power || power}; steps[cur].power = mode.power; brush = startBrush(); brushOptions.scroll = 0;
-  afterEdit(); say(mode.power === "Edit" ? "Editing freely. Tap a hex to change it." : `${mode.power}. Pick what to paint, then tap hexes.`);
+  mode = {power: steps[cur].power || power, resumed: !!resume}; steps[cur].power = mode.power; brush = startBrush(); brushOptions.scroll = 0;
+  afterEdit(); say(mode.power === "Edit" ? "Edit freely. Tap a hex." : `${mode.power}.`);
 }
 // what a power paints with when it starts (or is carried on from the steps bar), when there's only one sensible choice
+function pickNature(){
+  const set = nm => { closeModal(); brush = {k:"nat", v:nm}; mode.used = [nm, ...(mode.used || []).filter(x => x !== nm)].slice(0, 4); renderSheet(); draw(); };
+  openModal("Which nature?", el("div",{class:"opts natures"}, [...NATURES.map(x => x[0]), ...customNat.keys()].map(nm => el("button",{type:"button", class:"opt", onclick:() => set(nm)}, natIcon(nm, 22), nm))));
+}
 function startBrush(){
   const pw = mode.power, own = steps[cur].people, only = peoples.size === 1 ? [...peoples.keys()][0] : null;
   if (own) return {k:"people", v:own};                                           // the people this step made
@@ -497,7 +501,7 @@ function startPeoplePower(pw){
   }
   const make = of => (peopleForm.state = null, openModal(pw === "Create Ancestry" ? "A new people" : "A new heritage", [peopleForm(async (nm, color) => {
     const pid = await addPeople(nm, color, of); enterPower(pw); steps[cur].people = pid; brush = startBrush(); renderSheet(); draw();
-    say(`${nm}. Tap hexes where they live.`);
+    say(`${nm}.`);
   }), el("div",{class:"row"}, el("span",{class:"grow"}), el("button",{type:"button", class:"btn primary", onclick:() => $("mBody").querySelector("form").requestSubmit()}, "Next"))]));
   if (pw === "Create Ancestry") return make(null);
   if (!list.length){ toast("There are no peoples yet. Create an ancestry first."); return; }
@@ -508,16 +512,17 @@ function startPlacePower(pw){
   if (pw === "Raise Army" && !allThings("city").length){ toast("There are no cities yet. Found one first."); return; }
   if (pw === "March Army" && !allThings("army").length){ toast("There are no armies yet. Raise one first."); return; }
   enterPower(pw);
-  if (pw === "Exalt") openModal("A wonder", [el("p",{class:"note"}, "A land form gains a wonder: one thing in it, or the whole of it becoming its nature entirely."),
-    el("div",{class:"opts"},
-      el("button",{type:"button", class:"opt", onclick:() => { mode.whole = false; closeModal(); renderSheet(); }}, "One place in it"),
-      el("button",{type:"button", class:"opt", onclick:() => { mode.whole = true; closeModal(); renderSheet(); }}, "The whole land form"))]);
+  if (pw === "Shape Climate") return pickNature();
+  if (pw === "Exalt") openModal("Exalt", el("div",{class:"opts"},
+      el("button",{type:"button", class:"opt", onclick:() => { mode.whole = false; closeModal(); renderSheet(); }}, "One hex"),
+      el("button",{type:"button", class:"opt", onclick:() => nameThing("A wonder", "Name, such as The Valley of Perpetual Night", null, nm => {
+        mode.whole = true; brush = {k:"wonder", v:nm}; steps[cur].thing = nm; renderSheet(); draw(); }) }, "Land form")));
 }
-// the land form a hex belongs to: every connected hex of the same land
+// an exalted land form: the connected hexes of the same land, nearest first, up to one area or the end of that land
 function landFormOf(id){
-  const t = (view(id) || {}).t, out = [id], seen = new Set([id]);
-  for (let i = 0; i < out.length; i++){ const [c,r] = parse(out[i]);
-    for (const [nc,nr] of edgeNeighbors(c,r)){ const n = hid(nc,nr); if (inB(nc,nr) && !seen.has(n) && (view(n) || {}).t === t){ seen.add(n); out.push(n); } } }
+  const t = (view(id) || {}).t, area = AGES[age][1], out = [id], seen = new Set([id]);
+  for (let i = 0; i < out.length && out.length < area; i++){ const [c,r] = parse(out[i]);
+    for (const [nc,nr] of edgeNeighbors(c,r)){ if (out.length >= area) break; const n = hid(nc,nr); if (inB(nc,nr) && !seen.has(n) && (view(n) || {}).t === t){ seen.add(n); out.push(n); } } }
   return out;
 }
 // a small form for a name, with anything else the thing needs above it
@@ -538,7 +543,7 @@ function placeAt(id){
   if (pw === "Found City"){
     if (!brush){ toast("Pick whose city it is first."); return; }
     const who = peoples.get(brush.v), pid = brush.v;
-    if (d.p !== pid) toast(`The ${who.name} don't live here. You can still found it.`);
+    if (d.p !== pid) toast(`The ${who.name} don't live here.`);
     nameThing(`A city of the ${who.name}`, "Name, such as Vgd", null, nm => addThing(id, {k:"city", label:nm, color:who.color, p:pid}));
   } else if (pw === "Raise Army"){
     const cs = thingsAt(id, "city"); if (!cs.length){ toast("Tap one of the lit cities."); return; }
@@ -565,11 +570,8 @@ function placeAt(id){
       const city = near.find(x => x.m.id === by); addThing(id, {k:"built", label:nm, color: city ? city.m.color : "#efe6d2", ...(city ? {of: city.m.id} : {})}); });
   } else if (pw === "Exalt"){
     if (!d.t){ toast("Tap a land form."); return; }
-    if (mode.whole){
-      const ids = landFormOf(id);
-      nameThing(`A wonder over ${ids.length} ${ids.length === 1 ? "hex" : "hexes"}`, "Name, such as The Valley of Perpetual Night", null, nm => {
-        snapshot(); for (const x of ids) setField(x, "w", nm); steps[cur].thing = nm; exitPower(); toast(`${nm} is on the map.`); say(`${nm} placed.`); });
-    } else nameThing("A wonder", "Name, such as The World Tree", null, nm => addThing(id, {k:"wonder", label:nm, color:"#e6c440"}));
+    if (mode.whole) return paintWonder(id, d);
+    nameThing("A wonder", "Name, such as The World Tree", null, nm => addThing(id, {k:"wonder", label:nm, color:"#e6c440"}));
   } else if (pw === "Create Legend"){
     nameThing("A legend", "Name, such as The Grey Company", null, nm => addThing(id, {k:"legend", label:nm, color:"#e6c440"}));
   }
@@ -587,6 +589,13 @@ function reach(){
   if (pw === "Create Heritage"){ const of = (peoples.get(brush.v) || {}).of; return of ? where((id, d) => d.p === of) : null; }   // the parent people
   return null;
 }
+// an exalted land form: the first tap spreads it over the land around, later taps add or take away hexes
+function paintWonder(id, d){
+  const nm = brush.v, mine = steps[cur].ch[id] || {}, before = merge(base.get(id), patchUpTo(id, cur)) || {};
+  snapshot();
+  if (!stepSize(steps[cur])){ const ids = landFormOf(id); for (const x of ids) setField(x, "w", nm); afterEdit(); toast(`${nm}: ${ids.length} ${ids.length === 1 ? "hex" : "hexes"}.`); return; }
+  setField(id, "w", "w" in mine ? (before.w ?? null) : nm); afterEdit();
+}
 // Catastrophe destroys a thing: it stays on the map, crossed out, since survivors remain unless the wipe-out cost is paid
 function destroyAt(id){
   const live = ((view(id) || {}).m || []).filter(m => !m.x && THINGS.includes(m.k));
@@ -595,38 +604,20 @@ function destroyAt(id){
   if (live.length === 1) kill(live[0]);
   else openModal("Destroy which?", el("div",{class:"opts"}, live.map(m => el("button",{type:"button", class:"opt", onclick:() => kill(m)}, m.label || (MARKERS[m.k] || ["Marker"])[0]))));
 }
-// a new ancestry: "a legend arises within the new people for each player who paid toward it", aligned toward that player
-function offerLegends(pid, again){
-  const who = peoples.get(pid); if (!who) return;
-  const ids = Object.keys(steps[cur].ch).filter(id => (view(id) || {}).p === pid); if (!ids.length) return;
-  let sx = 0, sy = 0; for (const id of ids){ const [x,y] = center(...parse(id)); sx += x; sy += y; } sx /= ids.length; sy /= ids.length;
-  const home = ids.reduce((a,b) => { const [ax,ay] = center(...parse(a)), [bx,by] = center(...parse(b)); return Math.hypot(ax-sx, ay-sy) <= Math.hypot(bx-sx, by-sy) ? a : b; });
-  const add = () => {
-    const al = el("input",{id:"alignedTo", autocomplete:"off"}); al.value = myName();
-    nameThing(`A legend of the ${who.name}`, "Name, such as The First Mother", [el("label",{for:"alignedTo"}, "Aligned to (first level)"), al], nm => {
-      snapshot(); setField(home, "m", [...((view(home) || {}).m || []), {id: rid(), k:"legend", label:nm, color: who.color, p: pid, ...(al.value.trim() ? {aligned: al.value.trim()} : {})}]);
-      afterEdit(); toast(`${nm} is on the map.`); offerLegends(pid, true); });
-  };
-  openModal(again ? "Another legend?" : "Legends arise", [
-    el("p",{class:"note"}, again ? "Add one for each player who paid toward the ancestry." : `A legend arises within the ${who.name} for each player who paid toward them, aligned toward that player.`),
-    el("div",{class:"row"}, el("button",{type:"button", class:"btn", onclick:closeModal}, again ? "That's all" : "Not now"), el("span",{class:"grow"}), el("button",{type:"button", class:"btn primary", onclick:add}, "Add a legend"))]);
-}
 function exitPower(){
-  // a new ancestry that's been placed (and has no legends yet) offers to add the legends that arise with it
-  const st = steps[cur], legends = st.power === "Create Ancestry" && st.people && stepSize(st) && !Object.values(st.ch).some(p => p.m);
+  const st = steps[cur];
   if (!stepSize(st)){
     if (st.people){ delete draftDefs.peoples[st.people]; rebuildDefs(); }     // a people made but never placed goes away again
     if (steps.length > 1){ steps.splice(cur, 1); cur = steps.length - 1; } else steps[0] = emptyStep();
     rebuildDraft();
   }
   mode = null; brush = null; clearSelection(); afterEdit();
-  if (legends) offerLegends(st.people);
 }
 function choosePower(){
-  const body = [], first = AGE_FIRST[age] || [], go = pw => () => PEOPLE_POWERS.has(pw) ? startPeoplePower(pw) : PLACE_POWERS.has(pw) ? startPlacePower(pw) : enterPower(pw);
+  const body = [], first = AGE_FIRST[age] || [], go = pw => () => PEOPLE_POWERS.has(pw) ? startPeoplePower(pw) : ASK_FIRST.has(pw) ? startPlacePower(pw) : enterPower(pw);
   if (first.length) body.push(el("p",{class:"sub"}, `The ${AGES[age][0]}`), el("div",{class:"opts"}, first.map(pw => el("button",{type:"button", class:"opt", onclick:go(pw)}, pw))));
   for (const [group, list] of PAINT_POWERS){ const rest = list.filter(pw => !first.includes(pw)); if (rest.length) body.push(el("p",{class:"sub"}, first.length ? `More · ${group}` : group), el("div",{class:"opts"}, rest.map(pw => el("button",{type:"button", class:"opt", onclick:go(pw)}, pw)))); }
-  body.push(el("p",{class:"note"}, "Rouse, Align, Treat and Event don't change the map. For anything else, use Edit freely."));
+  body.push(el("p",{class:"note"}, "For anything else, use Edit freely."));
   openModal("Use a power", body);
 }
 // a new ancestry, or a people settling, starts from one tap: it spreads over the connected land of the same kind
@@ -644,16 +635,16 @@ function spreadFrom(id, who){
 function paintHex(id){
   if (PLACE_POWERS.has(mode.power)) return placeAt(id);
   if (mode.power === "Catastrophe" && brush && brush.k === "destroy") return destroyAt(id);
-  if (!brush){ toast(mode.power === "Shape Land" ? "Pick a land first." : mode.power === "Catastrophe" ? "Pick what it destroys first." : mode.power === "Settle" ? "Pick who settles first." : "Pick a nature first."); return; }
+  if (!brush){ if (mode.power === "Shape Climate") return pickNature(); toast(mode.power === "Shape Land" ? "Pick a land first." : mode.power === "Catastrophe" ? "Pick what it destroys first." : "Pick who settles first."); return; }
   const d = view(id) || {}, mine = steps[cur].ch[id] || {};
   if (brush.k !== "land" && !d.t){ toast("That hex needs land first."); return; }
   const before = merge(base.get(id), patchUpTo(id, cur)) || {};
   if ((mode.power === "Create Ancestry" || mode.power === "Settle") && !stepSize(steps[cur])){
     const nm = (peoples.get(brush.v) || {}).name;
-    if (d.p === brush.v){ toast(`The ${nm} already live there. Tap a lit hex next to them.`); return; }
+    if (d.p === brush.v){ toast(`The ${nm} already live there.`); return; }
     snapshot(); const ids = spreadFrom(id, brush.v);
     for (const x of ids) setField(x, "p", brush.v);
-    afterEdit(); const msg = `${nm} ${mode.power === "Settle" ? "settle in" : "begin in"} ${ids.length} ${ids.length === 1 ? "hex" : "hexes"}. Tap hexes to add or take some away.`; toast(msg); say(msg); return;
+    afterEdit(); const msg = `${nm}: ${ids.length} ${ids.length === 1 ? "hex" : "hexes"}.`; toast(msg); say(msg); return;
   }
   snapshot();
   if (brush.k === "land") setField(id, "t", "t" in mine ? (before.t ?? null) : brush.v);
@@ -675,19 +666,25 @@ function brushOptions(){
     for (const [k,v] of customLand) o.append(opt({k:"land", v:k}, [landIcon(k), v.name]));
     o.append(opt({k:"river"}, [hatchSwatch(RIVER_BLUE, "waves", 28), "River"]), opt({k:"land", v:null}, ["Clear land"]));
   } else if (mode.power === "Catastrophe"){
-    o.append(opt({k:"wipe"}, ["Wipe land"]), opt({k:"destroy"}, ["Destroy a city, army or legend"]));
+    o.append(opt({k:"wipe"}, ["Wipe land"]), opt({k:"destroy"}, ["Destroy"]));
   } else if (mode.power === "Found City"){
     for (const [pid,v] of peoples) o.append(opt({k:"city", v:pid}, [swatch(v.color), v.name]));
   } else if (PEOPLE_POWERS.has(mode.power)){
     const own = steps[cur].people, list = own ? [[own, peoples.get(own)]] : [...peoples];
     for (const [pid,v] of list) if (v) o.append(opt({k:"people", v:pid}, [swatch(v.color), v.name]));
-  } else for (const [nm] of [...NATURES, ...[...customNat.keys()].map(n => [n])]) o.append(opt({k:"nat", v:nm}, [natIcon(nm, 22), nm]));
+  } else {                                          // Shape Climate: the natures you've used in this step, and Change…
+    const used = mode.used || (brush ? [brush.v] : [...new Set(Object.values(steps[cur].ch).flatMap(p => p.n || []))].slice(0, 4));
+    for (const nm of used) o.append(opt({k:"nat", v:nm}, [natIcon(nm, 22), nm]));
+    o.append(el("button",{type:"button", class:"opt other", onclick:pickNature}, used.length ? "Change…" : "Pick a nature…"));
+  }
   return o;
 }
-function snapshot(){ undoStack.push(JSON.stringify({steps, cur})); if (undoStack.length > 60) undoStack.shift(); }
+// undo belongs to a step: each step keeps its own history, so Undo only takes back changes in the step you're on
+function snapshot(){ const st = steps[cur], u = st.u || (st.u = []); u.push(JSON.stringify({ch: st.ch, thing: st.thing || null})); if (u.length > 40) u.shift(); }
+const canUndo = () => !!(steps[cur].u && steps[cur].u.length);
 function undo(quiet){
-  if (!undoStack.length) return;
-  const prev = JSON.parse(undoStack.pop()); steps = prev.steps; cur = prev.cur; rebuildDraft();
+  if (!canUndo()) return;
+  const st = steps[cur], prev = JSON.parse(st.u.pop()); st.ch = prev.ch; if (prev.thing) st.thing = prev.thing; else delete st.thing; rebuildDraft();
   sheetForm = null; afterEdit(); if (!quiet){ toast("Undone."); say("Undone."); }
 }
 function afterEdit(){ saveDraftLocal(); renderDraftBar(); renderSheet(); draw(); }
@@ -1593,11 +1590,11 @@ function renderSheet(){
       el("button",{type:"button", class:"btn", onclick:()=>{ sheetForm=null; landForm.state = null; renderSheet(); }}, "Cancel"), el("span",{class:"grow"}),
       el("button",{type:"button", class:"btn primary", onclick:()=>form.requestSubmit()}, form.dataset.label)));
     else if (powersOn() && mode && (mode.power !== "Edit" || !n)) sheet.append(el("div",{class:"sfoot"},
-      el("button",{type:"button", class:"btn", disabled: !undoStack.length || null, onclick:() => undo()}, "Undo"),
+      el("button",{type:"button", class:"btn", disabled: !canUndo() || null, onclick:() => undo()}, "Undo"),
       el("span",{class:"what"}, ""),
       el("button",{type:"button", class:"btn primary", onclick:exitPower}, "Done")));
     else sheet.append(el("div",{class:"sfoot"},
-      writable() ? el("button",{type:"button", class:"btn", disabled: !undoStack.length || null, onclick:() => undo()}, "Undo") : null,
+      writable() ? el("button",{type:"button", class:"btn", disabled: !canUndo() || null, onclick:() => undo()}, "Undo") : null,
       el("span",{class:"what"}, !writable() ? "" : !n ? "No hexes selected" : adding ? `${n} ${n===1?"hex":"hexes"} · tap to add or remove` : n === 1 ? "Hold another hex to add it" : `${n} hexes selected`),
       el("button",{type:"button", class:"btn primary", onclick:clearSelection}, "Done")));
   }
@@ -1617,29 +1614,27 @@ function fillSheet(){
   if (painting){
     if (PLACE_POWERS.has(mode.power)){
       const who = brush && brush.v && peoples.get(brush.v);
-      const hint = {"Found City": !who ? "Pick whose city it is." : `Tap a lit hex, where the ${who.name} live, to found the city.`,
-        "Raise Army": "Tap one of the lit cities to raise an army there.",
-        "March Army": mode.army ? `Tap where ${mode.army.m.label} marches.` : "Tap one of the lit armies.",
-        "Build": "Tap the hex where it stands.",
-        "Create Legend": "Tap where the legend is. Legends can be anywhere.",
-        "Exalt": mode.whole ? "Tap the land form. The whole of it becomes the wonder." : "Tap the hex where the wonder stands."}[mode.power];
-      sheet.append(el("div",{class:"shead"}, el("div",{class:"stitle"}, el("h2",{}, mode.power))));
+      const hint = {"Found City": !who ? "Whose city?" : "Tap a hex for the city.", "Raise Army": "Tap a city.",
+        "March Army": mode.army ? `Tap where ${mode.army.m.label} goes.` : "Tap an army.", "Build": "Tap a hex.", "Create Legend": "Tap a hex.",
+        "Exalt": !mode.whole ? "Tap a hex." : stepSize(steps[cur]) ? "Tap hexes to add or remove." : "Tap the land form."}[mode.power];
+      const n = stepSize(steps[cur]), area = AGES[age][1], painting = mode.whole && brush && brush.k === "wonder";
+      sheet.append(el("div",{class:"shead"}, el("div",{class:"stitle"}, el("h2",{}, mode.power), steps.length > 1 ? el("span",{class:"coord"}, `step ${cur+1} of ${steps.length}`) : null),
+        painting ? el("span",{class:"count" + (n > area ? " over" : "")}, `${n} of ${area}`) : null));
       if (mode.power === "Found City" && peoples.size > 1) sheet.append(brushOptions());
       sheet.append(el("p",{class:"lead"}, hint));
       return;
     }
     const n = stepSize(steps[cur]), area = AGES[age][1], limited = AREA_POWERS.has(mode.power);
-    sheet.append(el("div",{class:"shead"}, el("div",{class:"stitle"}, el("h2",{}, mode.power)),
+    sheet.append(el("div",{class:"shead"}, el("div",{class:"stitle"}, el("h2",{}, mode.power), steps.length > 1 ? el("span",{class:"coord"}, `step ${cur+1} of ${steps.length}`) : null),
       el("span",{class:"count" + (limited && n > area ? " over" : "")}, limited ? `${n} of ${area}` : `${n} ${n === 1 ? "hex" : "hexes"}`)));
     if (limited && n > area) sheet.append(el("p",{class:"stepwarn", role:"status"}, `⚠ ${n} hexes is more than one area (${area}).`));
     const strip = brushOptions(), x = brushOptions.scroll || 0;
-    const hint = mode.power === "Catastrophe" ? (!brush ? "Pick what it destroys." : brush.k === "wipe" ? "Tap hexes to wipe them to bare land with no nature. Tap again to undo." : "Tap one of the lit things to destroy it. It stays on the map, crossed out.")
-      : !brush ? (mode.power === "Shape Land" ? "Pick a land, then tap hexes." : mode.power === "Settle" ? "Pick who settles, then tap hexes." : "Pick a nature, then tap hexes.")
-      : mode.power === "Settle" && !n ? `Tap a lit hex to settle the ${(peoples.get(brush.v) || {}).name} there. They spread over the land around it, up to one area.`
-      : mode.power === "Settle" ? "Tap hexes to add or take some away. Done when it looks right."
-      : mode.power === "Create Heritage" ? "Tap the hexes where the heritage lives. The lit hexes are its parent people's."
-      : mode.power === "Create Ancestry" && !n ? `Tap the hex where the ${(peoples.get(brush.v) || {}).name} begin. They spread over the land around it, up to one area.`
-      : PEOPLE_POWERS.has(mode.power) ? "Tap hexes to add or take some away. Done when it looks right." : "Tap hexes to paint. Tap again to take it off.";
+    const hint = mode.power === "Catastrophe" ? (!brush ? "Pick one." : brush.k === "wipe" ? "Tap hexes to wipe." : "Tap a city, army or legend.")
+      : !brush ? (mode.power === "Shape Land" ? "Pick a land, then tap hexes." : mode.power === "Settle" ? "Who settles?" : "Pick a nature, then tap hexes.")
+      : mode.power === "Settle" && !n ? "Tap a hex next to them."
+      : mode.power === "Create Heritage" ? "Tap hexes where they live."
+      : mode.power === "Create Ancestry" && !n ? `Tap where the ${(peoples.get(brush.v) || {}).name} begin.`
+      : "Tap hexes to add or remove.";
     sheet.append(strip, el("p",{class: PEOPLE_POWERS.has(mode.power) && brush && !n ? "lead" : "note"}, hint));
     strip.scrollLeft = x; requestAnimationFrame(() => { const on = strip.querySelector('[aria-pressed="true"]'); if (on) on.scrollIntoView({inline:"nearest", block:"nearest"}); });
     strip.onscroll = () => { brushOptions.scroll = strip.scrollLeft; };   // keep the strip where it was between taps
@@ -1899,7 +1894,7 @@ function renderDraftBar(){
     el("button",{type:"button", class: hasSteps() ? "btn" : "btn primary", onclick:choosePower}, "Use a power"),
     el("button",{type:"button", class:"btn", onclick:() => enterPower("Edit")}, "Edit freely")) : null;
   if (!hasSteps() && !rc) { confirmDiscard = false; if (powerRow) bar.append(powerRow); return; }
-  const undoBtn = el("button",{type:"button", class:"btn", disabled: !undoStack.length || null, onclick:() => undo()}, "Undo"),
+  const undoBtn = el("button",{type:"button", class:"btn", disabled: !canUndo() || null, onclick:() => undo()}, "Undo"),
     overBtn = el("button",{type:"button", class:"btn", onclick:()=>{ confirmDiscard=true; renderDraftBar(); }}, "Start over"),
     publishBtn = label => el("button",{type:"button", class:"btn primary", id:"saveBtn", "data-label":label, onclick:savePost}, label);
   if (!powersOn() && !confirmDiscard){
@@ -1909,20 +1904,19 @@ function renderDraftBar(){
   }
   if (confirmDiscard){
     bar.append(el("span",{class:"what"}, `Start over? This clears ${steps.length > 1 ? `all ${steps.length} steps` : "your changes"}.`),
-      el("button",{type:"button", class:"btn danger", onclick:()=>{ clearSteps(); draftDefs = {types:{}, peoples:{}}; rebuildDefs(); undoStack.length = 0; confirmDiscard=false; saveDraftLocal(); renderDraftBar(); renderSheet(); draw(); toast("Cleared. Your post is empty again."); }}, "Start over"),
+      el("button",{type:"button", class:"btn danger", onclick:()=>{ clearSteps(); draftDefs = {types:{}, peoples:{}}; rebuildDefs(); confirmDiscard=false; saveDraftLocal(); renderDraftBar(); renderSheet(); draw(); toast("Cleared. Your post is empty again."); }}, "Start over"),
       el("button",{type:"button", class:"btn", onclick:()=>{ confirmDiscard=false; renderDraftBar(); }}, "Keep"));
     return;
   }
   const st = steps[cur], n = stepSize(st), area = AGES[age][1], over = AREA_POWERS.has(st.power) && n > area;
-  const sub = [`${n} ${n === 1 ? "hex" : "hexes"}${AREA_POWERS.has(st.power) ? ` of ${area}` : ""} in this step`];
-  if (steps.length > 1) sub.push(`${all} in all`);
-  if (cur < steps.length - 1) sub.push("later steps hidden");
+  const sub = [`Step ${cur+1} of ${steps.length}`, AREA_POWERS.has(st.power) ? `${n} of ${area}` : `${n} ${n === 1 ? "hex" : "hexes"}`];
   bar.append(...[
     el("div",{class:"steprow"},
       el("button",{type:"button", class:"btn icon", "aria-label":"Previous step", disabled: cur === 0 || null, onclick:() => goStep(cur - 1)}, "‹"),
       el("button",{type:"button", class:"stepname", "aria-label":`Step ${cur+1} of ${steps.length}: ${st.power || "Edit"}. Tap to carry on with it.`, onclick:() => enterPower(st.power || "Edit", true)},
-        el("strong",{}, el("span",{class:"dot","aria-hidden":"true"}), `Step ${cur+1} of ${steps.length} · `, !st.power || st.power === "Edit" ? "Edit freely" : st.power, " ›"),
-        el("small",{}, rc && !all ? "Border colors changed" : st.thing ? st.thing : sub.join(" · "))),
+        el("strong",{}, el("span",{class:"dot","aria-hidden":"true"}), !st.power || st.power === "Edit" ? "Edit freely" : st.power, st.thing ? ` · ${st.thing}` : ""),
+        el("small",{}, rc && !all ? "Border colors changed" : sub.join(" · "))),
+      el("button",{type:"button", class:"btn", onclick:() => enterPower(st.power || "Edit", true)}, "Edit step"),
       el("button",{type:"button", class:"btn icon", "aria-label":"Next step", disabled: cur === steps.length - 1 || null, onclick:() => goStep(cur + 1)}, "›")),
     over ? el("p",{class:"stepwarn", role:"status"}, `⚠ ${n} hexes is more than one area (${area}) for ${st.power}.`) : null,
     powerRow, undoBtn, overBtn, el("span",{class:"grow"}), publishBtn("Publish")].filter(Boolean));
@@ -1949,7 +1943,7 @@ async function savePost(){
   if (!all.size && !pendingRecolors()) return;
   if (backend && backend.needsName && !myName()) return withName(savePost);
   const post = newPost({ changes: wire(Object.fromEntries(all)) });
-  const used = steps.filter(stepSize).map(st => ({ power: st.power || "", hexes: Object.keys(st.ch), ...(st.thing ? {thing: st.thing} : {}) }));
+  const used = steps.filter(stepSize).map(st => ({ power: st.power || "", hexes: Object.keys(st.ch), ...(st.thing ? {thing: st.thing} : {}) }));   // not its undo history
   if (used.length && powersOn()) post.steps = used;
   if (Object.keys(draftDefs.types).length) post.types = draftDefs.types;
   if (Object.keys(draftDefs.peoples).length) post.peoples = draftDefs.peoples;
@@ -1957,7 +1951,7 @@ async function savePost(){
   stateDue = post.id;          // set first: the post can come back on the live stream before publish returns
   try { await backend.publish(post); }
   catch(e){ stateDue = null; if (btn){ btn.disabled=false; btn.textContent = btn.dataset.label; } toast(e && e.code==="invalid_argument" ? "You can view this map but not change it." : "Couldn't publish. Your changes are kept; try again."); return; }
-  clearSteps(); draftDefs = {types:{}, peoples:{}}; undoStack.length = 0; saveDraftLocal(); clearSelection(); renderDraftBar(); draw();
+  clearSteps(); draftDefs = {types:{}, peoples:{}}; saveDraftLocal(); clearSelection(); renderDraftBar(); draw();
   toast("Published. Everyone can see it now."); say("Post published.");
 }
 async function publishWorld(world){
@@ -2291,7 +2285,7 @@ function onMap(id){
   lsSet("soc-map", id);
   if (first && (was === null || was === id)) return;            // same map as last time: keep the draft
   const lost = draft.size;
-  clearSteps(); draftDefs = {types:{}, peoples:{}}; undoStack.length = 0; saveDraftLocal();
+  clearSteps(); draftDefs = {types:{}, peoples:{}}; saveDraftLocal();
   posts = []; base = new Map(); customLand.clear(); customNat.clear(); peoples.clear(); age = 1;
   if (histIdx !== null) showHistory(null);
   if (highlight) setHighlight(null);
