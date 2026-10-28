@@ -466,7 +466,18 @@ function setField(id, field, value){
   if (Object.keys(p).length) ch[id] = p; else delete ch[id];
   rebuildDraft();
 }
-function goStep(i){ cur = Math.max(0, Math.min(steps.length - 1, i)); rebuildDraft(); saveDraftLocal(); renderDraftBar(); renderSheet(); draw(); say(`Step ${cur+1} of ${steps.length}${steps[cur].power ? ", " + steps[cur].power : ""}.`); }
+// moving between steps opens the step you land on, ready to change (an empty step you leave behind goes away)
+function goStep(i){
+  const target = steps[Math.max(0, Math.min(steps.length - 1, i))];
+  if (mode && !stepSize(steps[cur]) && steps.length > 1){ if (steps[cur].people){ delete draftDefs.peoples[steps[cur].people]; rebuildDefs(); } steps.splice(cur, 1); }
+  mode = null; cur = steps.indexOf(target); rebuildDraft();
+  enterPower(target.power || "Edit", true);
+  say(`Step ${cur+1} of ${steps.length}, ${target.power || "Edit freely"}.`);
+}
+// ‹ step 2 of 3 › — used on the steps bar and in a step's own panel
+const stepArrows = () => steps.length > 1 ? [
+  el("button",{type:"button", class:"btn icon", "aria-label":"Previous step", disabled: cur === 0 || null, onclick:() => goStep(cur - 1)}, "‹"),
+  el("button",{type:"button", class:"btn icon", "aria-label":"Next step", disabled: cur === steps.length - 1 || null, onclick:() => goStep(cur + 1)}, "›")] : [null, null];
 function clearSteps(){ steps = [emptyStep()]; cur = 0; draft.clear(); }
 // start using a power: a new step at the end (or carry on with the step you're on, when resuming it)
 function enterPower(power, resume){
@@ -1618,15 +1629,15 @@ function fillSheet(){
         "March Army": mode.army ? `Tap where ${mode.army.m.label} goes.` : "Tap an army.", "Build": "Tap a hex.", "Create Legend": "Tap a hex.",
         "Exalt": !mode.whole ? "Tap a hex." : stepSize(steps[cur]) ? "Tap hexes to add or remove." : "Tap the land form."}[mode.power];
       const n = stepSize(steps[cur]), area = AGES[age][1], painting = mode.whole && brush && brush.k === "wonder";
-      sheet.append(el("div",{class:"shead"}, el("div",{class:"stitle"}, el("h2",{}, mode.power), steps.length > 1 ? el("span",{class:"coord"}, `step ${cur+1} of ${steps.length}`) : null),
-        painting ? el("span",{class:"count" + (n > area ? " over" : "")}, `${n} of ${area}`) : null));
+      sheet.append(el("div",{class:"shead"}, stepArrows()[0], el("div",{class:"stitle"}, el("h2",{}, mode.power), steps.length > 1 ? el("span",{class:"coord"}, `step ${cur+1} of ${steps.length}`) : null),
+        painting ? el("span",{class:"count" + (n > area ? " over" : "")}, `${n} of ${area}`) : null, stepArrows()[1]));
       if (mode.power === "Found City" && peoples.size > 1) sheet.append(brushOptions());
       sheet.append(el("p",{class:"lead"}, hint));
       return;
     }
     const n = stepSize(steps[cur]), area = AGES[age][1], limited = AREA_POWERS.has(mode.power);
-    sheet.append(el("div",{class:"shead"}, el("div",{class:"stitle"}, el("h2",{}, mode.power), steps.length > 1 ? el("span",{class:"coord"}, `step ${cur+1} of ${steps.length}`) : null),
-      el("span",{class:"count" + (limited && n > area ? " over" : "")}, limited ? `${n} of ${area}` : `${n} ${n === 1 ? "hex" : "hexes"}`)));
+    sheet.append(el("div",{class:"shead"}, stepArrows()[0], el("div",{class:"stitle"}, el("h2",{}, mode.power), steps.length > 1 ? el("span",{class:"coord"}, `step ${cur+1} of ${steps.length}`) : null),
+      el("span",{class:"count" + (limited && n > area ? " over" : "")}, limited ? `${n} of ${area}` : `${n} ${n === 1 ? "hex" : "hexes"}`), stepArrows()[1]));
     if (limited && n > area) sheet.append(el("p",{class:"stepwarn", role:"status"}, `⚠ ${n} hexes is more than one area (${area}).`));
     const strip = brushOptions(), x = brushOptions.scroll || 0;
     const hint = mode.power === "Catastrophe" ? (!brush ? "Pick one." : brush.k === "wipe" ? "Tap hexes to wipe." : "Tap a city, army or legend.")
@@ -1641,7 +1652,8 @@ function fillSheet(){
     return;
   }
   if (powersOn() && mode && !selection.size){
-    sheet.append(el("div",{class:"shead"}, el("h2",{}, "Edit freely")), el("p",{class:"note"}, "Tap a hex to change anything on it. Hold to add more hexes."));
+    sheet.append(el("div",{class:"shead"}, stepArrows()[0], el("div",{class:"stitle"}, el("h2",{}, "Edit freely"), steps.length > 1 ? el("span",{class:"coord"}, `step ${cur+1} of ${steps.length}`) : null), stepArrows()[1]),
+      el("p",{class:"note"}, "Tap a hex to change it. Hold to add more hexes."));
     return;
   }
   if (!selection.size){   // waiting for a new group after "deselect all"
@@ -1913,10 +1925,9 @@ function renderDraftBar(){
   bar.append(...[
     el("div",{class:"steprow"},
       el("button",{type:"button", class:"btn icon", "aria-label":"Previous step", disabled: cur === 0 || null, onclick:() => goStep(cur - 1)}, "‹"),
-      el("button",{type:"button", class:"stepname", "aria-label":`Step ${cur+1} of ${steps.length}: ${st.power || "Edit"}. Tap to carry on with it.`, onclick:() => enterPower(st.power || "Edit", true)},
+      el("button",{type:"button", class:"stepname", "aria-label":`Step ${cur+1} of ${steps.length}: ${st.power || "Edit"}. Open it.`, onclick:() => enterPower(st.power || "Edit", true)},
         el("strong",{}, el("span",{class:"dot","aria-hidden":"true"}), !st.power || st.power === "Edit" ? "Edit freely" : st.power, st.thing ? ` · ${st.thing}` : ""),
         el("small",{}, rc && !all ? "Border colors changed" : sub.join(" · "))),
-      el("button",{type:"button", class:"btn", onclick:() => enterPower(st.power || "Edit", true)}, "Edit step"),
       el("button",{type:"button", class:"btn icon", "aria-label":"Next step", disabled: cur === steps.length - 1 || null, onclick:() => goStep(cur + 1)}, "›")),
     over ? el("p",{class:"stepwarn", role:"status"}, `⚠ ${n} hexes is more than one area (${area}) for ${st.power}.`) : null,
     powerRow, undoBtn, overBtn, el("span",{class:"grow"}), publishBtn("Publish")].filter(Boolean));

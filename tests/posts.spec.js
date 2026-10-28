@@ -77,19 +77,19 @@ test.describe("powers first", () => {
     expect((await app.view("h16_26")).n).toEqual(["Deep"]);
     await app.footer("Done").click();
     await expect(bar(app)).toContainText("Shape ClimateStep 2 of 2");
-    // back to step 1: like any stepper, step 2 isn't shown until you go forward again
+    // back to step 1: it opens, ready to change; step 2 isn't shown until you go forward again
     await bar(app).getByRole("button", { name: "Previous step" }).click();
-    await expect(bar(app)).toContainText("Shape LandStep 1 of 2");
+    await expect(app.page.locator("#sheet")).toContainText("Shape Land");
     expect((await app.view("h16_26")).n).toBeUndefined();
-    // carry on with step 1: add a hex to it, and Undo only takes back what's in that step
-    await bar(app).getByRole("button", { name: "Edit step" }).click();
     await app.button("Forest").click(); await app.tapHex(18, 26);
-    await app.footer("Done").click();
     expect((await app.view("h18_26")).t).toBe("forest");
-    await bar(app).getByRole("button", { name: "Undo" }).click();
+    await app.footer("Undo").click();                                 // Undo only takes back what's in this step
     expect(await app.view("h18_26")).toBeNull();
     expect((await app.view("h17_26")).t).toBe("forest");
-    await bar(app).getByRole("button", { name: "Next step" }).click();
+    await app.page.locator("#sheet").getByRole("button", { name: "Next step" }).click();   // step 2 opens from step 1's panel
+    await expect(app.page.locator("#sheet")).toContainText("Shape Climate");
+    expect((await app.view("h16_26")).n).toEqual(["Deep"]);
+    await app.footer("Done").click();
     await app.page.locator("#saveBtn").click();
     await expect.poll(() => app.page.evaluate(() => Object.entries(window.__mockStore.all()).filter(([k]) => k.startsWith("posts/")).map(([, v]) => v.steps))).toEqual([[
       { power: "Shape Land", hexes: ["h16_26", "h17_26"] }, { power: "Shape Climate", hexes: ["h16_26"] }]]);
