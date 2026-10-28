@@ -619,10 +619,10 @@ function destroyAt(id){
 // costs by age, from the Table of Powers
 const COST = {"Shape Land":[3,5,8], "Shape Climate":[2,4,6], "Rouse":[4,4,4], "Create Ancestry":[22,6,15], "Create Heritage":[12,4,10],
   "Create Legend":[10,7,8], "Found City":[8,4,3], "Settle":[8,4,3], "Build":[6,4,2], "Raise Army":[6,4,2], "March Army":[4,3,2], "Exalt":[6,5,6], "Catastrophe":[10,10,10]};
-// the powers a turn used, one line per power, ready to paste into Discord: **Shape Land(3x2):** Water, Forest
+// the powers a turn used, ready to paste into Discord; uses that are the same power and the same thing collapse: **Shape Land(3x2):** Water
 // list: steps ({power, ch, thing}); prior: the map before them (hex -> state); a: the age they were in
 function turnSummary(list = steps, prior = base, a = age){
-  const lines = new Map();            // power -> {n, what: [...]}, in the order they were first used
+  const lines = new Map();            // "power|what" -> {pw, what, n}, in the order they were first used
   for (const st of list){
     if (!stepSize(st) || !st.power || st.power === "Edit") continue;
     const ps = Object.entries(st.ch), uniq = a => [...new Set(a)].join(", ");
@@ -631,10 +631,10 @@ function turnSummary(list = steps, prior = base, a = age){
     else if (st.power === "Shape Climate") what = uniq(ps.flatMap(([id, p]) => (p.n || []).filter(nm => !(((prior.get(id) || {}).n) || []).includes(nm))));
     else if (["Create Ancestry","Create Heritage","Settle"].includes(st.power)) what = uniq(ps.map(([, p]) => p.p && (peoples.get(p.p) || {}).name).filter(Boolean));
     else if (st.power === "Catastrophe") what = uniq([...(ps.some(([, p]) => "t" in p) ? ["wipe land"] : []), ...(st.thing ? [st.thing] : [])]);
-    const g = lines.get(st.power) || {n: 0, what: []}; g.n++; if (what) g.what.push(...what.split(", ")); lines.set(st.power, g);
+    const key = st.power + "|" + what, g = lines.get(key) || {pw: st.power, what, n: 0}; g.n++; lines.set(key, g);
   }
-  return [...lines].map(([pw, g]) => { const c = COST[pw] ? COST[pw][a - 1] : null;
-    return `**${pw}${c === null ? "" : g.n > 1 ? `(${c}x${g.n})` : `(${c})`}:** ${[...new Set(g.what)].join(", ")}`.trim(); }).join("\n");
+  return [...lines.values()].map(({pw, what, n}) => { const c = COST[pw] ? COST[pw][a - 1] : null;
+    return `**${pw}${c === null ? "" : n > 1 ? `(${c}x${n})` : `(${c})`}:** ${what}`.trim(); }).join("\n");
 }
 function showSummary(text, copyOnly){
   const box = el("textarea",{id:"summary", readonly:true, rows: String(Math.min(10, text.split("\n").length + 1)), style:"box-sizing:border-box;width:100%;font:inherit;padding:10px;border-radius:10px;resize:none;border:2px solid var(--line);background:var(--raise);color:inherit"});
