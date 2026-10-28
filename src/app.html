@@ -604,32 +604,14 @@ function destroyAt(id){
   if (live.length === 1) kill(live[0]);
   else openModal("Destroy which?", el("div",{class:"opts"}, live.map(m => el("button",{type:"button", class:"opt", onclick:() => kill(m)}, m.label || (MARKERS[m.k] || ["Marker"])[0]))));
 }
-// a new ancestry: "a legend arises within the new people for each player who paid toward it", aligned toward that player
-function offerLegends(pid, again){
-  const who = peoples.get(pid); if (!who) return;
-  const ids = Object.keys(steps[cur].ch).filter(id => (view(id) || {}).p === pid); if (!ids.length) return;
-  let sx = 0, sy = 0; for (const id of ids){ const [x,y] = center(...parse(id)); sx += x; sy += y; } sx /= ids.length; sy /= ids.length;
-  const home = ids.reduce((a,b) => { const [ax,ay] = center(...parse(a)), [bx,by] = center(...parse(b)); return Math.hypot(ax-sx, ay-sy) <= Math.hypot(bx-sx, by-sy) ? a : b; });
-  const add = () => {
-    const al = el("input",{id:"alignedTo", autocomplete:"off"}); al.value = myName();
-    nameThing(`A legend of the ${who.name}`, "Name, such as The First Mother", [el("label",{for:"alignedTo"}, "Aligned to"), al], nm => {
-      snapshot(); setField(home, "m", [...((view(home) || {}).m || []), {id: rid(), k:"legend", label:nm, color: who.color, p: pid, ...(al.value.trim() ? {aligned: al.value.trim()} : {})}]);
-      afterEdit(); toast(`${nm} is on the map.`); offerLegends(pid, true); });
-  };
-  openModal(again ? "Another legend?" : `Add legends to the ${who.name}?`, [
-    el("p",{class:"note"}, "One for each player who paid for them."),
-    el("div",{class:"row"}, el("button",{type:"button", class:"btn", onclick:closeModal}, again ? "Done" : "Skip"), el("span",{class:"grow"}), el("button",{type:"button", class:"btn primary", onclick:add}, "Add a legend"))]);
-}
 function exitPower(){
-  // a new ancestry that's been placed (and has no legends yet) offers to add the legends that arise with it
-  const st = steps[cur], legends = st.power === "Create Ancestry" && st.people && stepSize(st) && !Object.values(st.ch).some(p => p.m);
+  const st = steps[cur];
   if (!stepSize(st)){
     if (st.people){ delete draftDefs.peoples[st.people]; rebuildDefs(); }     // a people made but never placed goes away again
     if (steps.length > 1){ steps.splice(cur, 1); cur = steps.length - 1; } else steps[0] = emptyStep();
     rebuildDraft();
   }
   mode = null; brush = null; clearSelection(); afterEdit();
-  if (legends) offerLegends(st.people);
 }
 function choosePower(){
   const body = [], first = AGE_FIRST[age] || [], go = pw => () => PEOPLE_POWERS.has(pw) ? startPeoplePower(pw) : ASK_FIRST.has(pw) ? startPlacePower(pw) : enterPower(pw);

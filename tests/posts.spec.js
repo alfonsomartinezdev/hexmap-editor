@@ -108,8 +108,6 @@ test.describe("powers first", () => {
     await app.tapHex(17, 26); await app.tapHex(18, 26);     // then hexes can be taken off (or added)
     expect((await app.view("h18_26")).p).toBeUndefined();
     await app.footer("Done").click();
-    await expect(app.page.locator("#mTitle")).toHaveText("Add legends to the Elves?");
-    await app.page.locator("#mBody").getByRole("button", { name: "Skip" }).click();
     await usePower(app, "Settle");                          // the only people is picked already
     await expect(app.page.locator("#sheet")).toContainText("Tap a hex next to them");
     await app.tapHex(17, 26);                              // spreads over the plains they don't live in yet
@@ -129,25 +127,21 @@ test.describe("powers first", () => {
     await usePower(app, "Create Ancestry");
     await app.page.locator("#otherName").fill("Elves"); await app.page.locator("#mBody").getByRole("button", { name: "Next" }).click();
     await app.tapHex(14, 26); await app.footer("Done").click();
-    await app.page.locator("#mBody").getByRole("button", { name: "Add a legend" }).click();   // a legend arises for each player who paid
-    await app.page.locator("#alignedTo").fill("Ash"); await name("The First Mother");
-    await app.page.locator("#mBody").getByRole("button", { name: "Done" }).click();
-    expect(Object.values(await app.page.evaluate(() => window.__soc.state().draft)).flatMap(p => p.m || [])).toEqual([expect.objectContaining({ k: "legend", label: "The First Mother", aligned: "Ash" })]);
     await usePower(app, "Found City");
     await expect(app.page.locator("#sheet")).toContainText("Tap a hex for the city");
     await app.tapHex(15, 26); await name("Vgd");
-    expect(await things("h15_26")).toContainEqual(expect.objectContaining({ k: "city", label: "Vgd" }));
+    expect(await things("h15_26")).toEqual([expect.objectContaining({ k: "city", label: "Vgd" })]);
     await expect(bar(app)).toContainText("Found City");
     await usePower(app, "Raise Army"); await app.tapHex(15, 26); await name("The Host");
     await usePower(app, "March Army"); await app.tapHex(15, 26);
     await expect(app.page.locator("#sheet")).toContainText("Tap where The Host goes");
     await app.tapHex(17, 26);
     expect((await things("h17_26")).map(m => m.label)).toEqual(["The Host"]);
-    expect((await things("h15_26")).map(m => m.label)).toEqual(["The First Mother", "Vgd"]);
+    expect((await things("h15_26")).map(m => m.label)).toEqual(["Vgd"]);
     await usePower(app, "Build"); await app.tapHex(16, 26);
     await expect(app.page.locator("#mBody")).toContainText("Built by");
     await name("The Long Wall");
-    expect(await things("h16_26")).toEqual([expect.objectContaining({ k: "built", label: "The Long Wall", of: (await things("h15_26")).find(m => m.k === "city").id })]);
+    expect(await things("h16_26")).toEqual([expect.objectContaining({ k: "built", label: "The Long Wall", of: (await things("h15_26"))[0].id })]);
     await usePower(app, "Create Legend"); await app.tapHex(14, 26); await name("The Grey Company");
     await expect(bar(app)).toContainText("Create Legend · The Grey CompanyStep 7 of 7");
     await expect(bar(app)).toContainText("The Grey Company");
