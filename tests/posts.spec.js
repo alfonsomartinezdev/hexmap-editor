@@ -109,15 +109,15 @@ test.describe("powers first", () => {
     await usePower(app, "Shape Land"); await app.button("Plains").click();
     for (const c of [14, 15, 16, 17, 18]) await app.tapHex(c, 26);
     await app.footer("Done").click();
-    await usePower(app, "Create Ancestry");
-    await app.page.locator("#otherName").fill("Elves");
-    await app.page.locator("#mBody").getByRole("button", { name: "Next" }).click();
-    await expect(app.page.locator("#sheet")).toContainText("Tap where the Elves begin");
+    await usePower(app, "Create Ancestry");                 // tap first, name on Done
+    await expect(app.page.locator("#sheet")).toContainText("Tap where they begin");
     await app.tapHex(14, 26);                              // one tap spreads over the connected plains
     await expect(app.page.locator("#sheet")).toContainText("5 of 19");
     await app.tapHex(17, 26); await app.tapHex(18, 26);     // then hexes can be taken off (or added)
     expect((await app.view("h18_26")).p).toBeUndefined();
     await app.footer("Done").click();
+    await app.page.locator("#otherName").fill("Elves"); await app.page.locator("#mBody").getByRole("button", { name: "Done" }).click();
+    expect(Object.values(JSON.parse(await app.page.evaluate(() => localStorage.getItem("soc-defs"))).peoples).map(p => p.name)).toEqual(["Elves"]);
     await usePower(app, "Settle");                          // the only people is picked already
     await expect(app.page.locator("#sheet")).toContainText("Tap a hex next to them");
     await app.tapHex(17, 26);                              // spreads over the plains they don't live in yet
@@ -135,8 +135,8 @@ test.describe("powers first", () => {
     for (const c of [14, 15, 16, 17]) await app.tapHex(c, 26);
     await app.footer("Done").click();
     await usePower(app, "Create Ancestry");
-    await app.page.locator("#otherName").fill("Elves"); await app.page.locator("#mBody").getByRole("button", { name: "Next" }).click();
     await app.tapHex(14, 26); await app.footer("Done").click();
+    await app.page.locator("#otherName").fill("Elves"); await app.page.locator("#mBody").getByRole("button", { name: "Done" }).click();
     await usePower(app, "Found City");
     await expect(app.page.locator("#sheet")).toContainText("Tap a hex for the city");
     await app.tapHex(15, 26); await name("Vgd");
@@ -164,12 +164,12 @@ test.describe("powers first", () => {
     await app.footer("Done").click();
     // Exalt: one place, or the whole land form
     await usePower(app, "Exalt"); await app.page.locator("#mBody").getByRole("button", { name: "Land form" }).click();
-    await name("The Long Meadow"); await app.tapHex(14, 26);           // named first, then one tap spreads over the land form
-    expect((await app.view("h14_26")).w).toBe("The Long Meadow");
-    expect((await app.view("h15_26")).w).toBe("The Long Meadow");
-    await app.tapHex(15, 26);                                          // and it can be trimmed
+    await app.tapHex(14, 26);                                          // one tap spreads over the land form
+    expect((await app.view("h15_26")).w).toBeTruthy();
+    await app.tapHex(15, 26);                                          // it can be trimmed
     expect((await app.view("h15_26")).w).toBeUndefined();
-    await app.footer("Done").click();
+    await app.footer("Done").click(); await name("The Long Meadow");   // and it's named on Done
+    expect((await app.view("h14_26")).w).toBe("The Long Meadow");
     await usePower(app, "Exalt"); await app.page.locator("#mBody").getByRole("button", { name: "One hex" }).click();
     await app.tapHex(17, 26); await name("The World Tree");
     expect((await things("h17_26")).map(m => m.k)).toEqual(["army", "wonder"]);
@@ -177,8 +177,6 @@ test.describe("powers first", () => {
 
   test("a new people never placed is dropped when you leave", async ({ app }) => {
     await usePower(app, "Create Ancestry");
-    await app.page.locator("#otherName").fill("Ghosts");
-    await app.page.locator("#mBody").getByRole("button", { name: "Next" }).click();
     await app.footer("Done").click();
     expect(await app.page.evaluate(() => JSON.parse(localStorage.getItem("soc-defs")).peoples)).toEqual({});
   });
