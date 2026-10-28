@@ -108,7 +108,7 @@ test.describe("powers first", () => {
     await app.tapHex(17, 26); await app.tapHex(18, 26);     // then hexes can be taken off (or added)
     expect((await app.view("h18_26")).p).toBeUndefined();
     await app.footer("Done").click();
-    await expect(app.page.locator("#mTitle")).toHaveText("Legends of the Elves?");
+    await expect(app.page.locator("#mTitle")).toHaveText("Add legends to the Elves?");
     await app.page.locator("#mBody").getByRole("button", { name: "Skip" }).click();
     await usePower(app, "Settle");                          // the only people is picked already
     await expect(app.page.locator("#sheet")).toContainText("Tap a hex next to them");
@@ -160,9 +160,12 @@ test.describe("powers first", () => {
     await app.footer("Done").click();
     // Exalt: one place, or the whole land form
     await usePower(app, "Exalt"); await app.page.locator("#mBody").getByRole("button", { name: "Land form" }).click();
-    await app.tapHex(14, 26); await name("The Long Meadow");
+    await name("The Long Meadow"); await app.tapHex(14, 26);           // named first, then one tap spreads over the land form
     expect((await app.view("h14_26")).w).toBe("The Long Meadow");
     expect((await app.view("h15_26")).w).toBe("The Long Meadow");
+    await app.tapHex(15, 26);                                          // and it can be trimmed
+    expect((await app.view("h15_26")).w).toBeUndefined();
+    await app.footer("Done").click();
     await usePower(app, "Exalt"); await app.page.locator("#mBody").getByRole("button", { name: "One hex" }).click();
     await app.tapHex(17, 26); await name("The World Tree");
     expect((await things("h17_26")).map(m => m.k)).toEqual(["army", "wonder"]);

@@ -430,7 +430,7 @@ const same = (a,b) => JSON.stringify(a??null) === JSON.stringify(b??null);
 function view(id){ return histIdx!==null ? (histState.get(id)||null) : merge(base.get(id), draft.get(id)); }
 /* ---- steps: a draft is a list of steps, each one use of a power (Shape Land, Shape Climate…).
    Like any stepper, the map shows your steps up to the one you're on. Where two steps change the same hex, the later one wins. ---- */
-const AREA_POWERS = new Set(["Shape Land","Shape Climate","Catastrophe","Settle","Create Ancestry","Rouse"]);   // one use covers up to one area
+const AREA_POWERS = new Set(["Shape Land","Shape Climate","Catastrophe","Settle","Create Ancestry","Rouse","Exalt"]);   // one use covers up to one area
 // a step: which power, its changes (hex -> patch), and for some powers the new people it made or the thing it named
 const emptyStep = () => ({power:null, ch:{}});
 // powers (opt-in from the menu for now): tapping a hex only shows it; each change is a step, made through
@@ -515,7 +515,8 @@ function startPlacePower(pw){
   if (pw === "Shape Climate") return pickNature();
   if (pw === "Exalt") openModal("Exalt", el("div",{class:"opts"},
       el("button",{type:"button", class:"opt", onclick:() => { mode.whole = false; closeModal(); renderSheet(); }}, "One hex"),
-      el("button",{type:"button", class:"opt", onclick:() => { mode.whole = true; closeModal(); renderSheet(); }}, "Land form")));
+      el("button",{type:"button", class:"opt", onclick:() => nameThing("A wonder", "Name, such as The Valley of Perpetual Night", null, nm => {
+        mode.whole = true; brush = {k:"wonder", v:nm}; steps[cur].thing = nm; renderSheet(); draw(); }) }, "Land form")));
 }
 // an exalted land form: the connected hexes of the same land, nearest first, up to one area or the end of that land
 function landFormOf(id){
@@ -569,11 +570,8 @@ function placeAt(id){
       const city = near.find(x => x.m.id === by); addThing(id, {k:"built", label:nm, color: city ? city.m.color : "#efe6d2", ...(city ? {of: city.m.id} : {})}); });
   } else if (pw === "Exalt"){
     if (!d.t){ toast("Tap a land form."); return; }
-    if (mode.whole){
-      const ids = landFormOf(id);
-      nameThing(`A wonder over ${ids.length} ${ids.length === 1 ? "hex" : "hexes"}`, "Name, such as The Valley of Perpetual Night", null, nm => {
-        snapshot(); for (const x of ids) setField(x, "w", nm); steps[cur].thing = nm; exitPower(); toast(`${nm} is on the map.`); say(`${nm} placed.`); });
-    } else nameThing("A wonder", "Name, such as The World Tree", null, nm => addThing(id, {k:"wonder", label:nm, color:"#e6c440"}));
+    if (mode.whole) return paintWonder(id, d);
+    nameThing("A wonder", "Name, such as The World Tree", null, nm => addThing(id, {k:"wonder", label:nm, color:"#e6c440"}));
   } else if (pw === "Create Legend"){
     nameThing("A legend", "Name, such as The Grey Company", null, nm => addThing(id, {k:"legend", label:nm, color:"#e6c440"}));
   }
@@ -590,6 +588,13 @@ function reach(){
     edgeNeighbors(...parse(id)).some(([c,r]) => inB(c,r) && (view(hid(c,r)) || {}).p === brush.v));
   if (pw === "Create Heritage"){ const of = (peoples.get(brush.v) || {}).of; return of ? where((id, d) => d.p === of) : null; }   // the parent people
   return null;
+}
+// an exalted land form: the first tap spreads it over the land around, later taps add or take away hexes
+function paintWonder(id, d){
+  const nm = brush.v, mine = steps[cur].ch[id] || {}, before = merge(base.get(id), patchUpTo(id, cur)) || {};
+  snapshot();
+  if (!stepSize(steps[cur])){ const ids = landFormOf(id); for (const x of ids) setField(x, "w", nm); afterEdit(); toast(`${nm}: ${ids.length} ${ids.length === 1 ? "hex" : "hexes"}.`); return; }
+  setField(id, "w", "w" in mine ? (before.w ?? null) : nm); afterEdit();
 }
 // Catastrophe destroys a thing: it stays on the map, crossed out, since survivors remain unless the wipe-out cost is paid
 function destroyAt(id){
@@ -611,8 +616,9 @@ function offerLegends(pid, again){
       snapshot(); setField(home, "m", [...((view(home) || {}).m || []), {id: rid(), k:"legend", label:nm, color: who.color, p: pid, ...(al.value.trim() ? {aligned: al.value.trim()} : {})}]);
       afterEdit(); toast(`${nm} is on the map.`); offerLegends(pid, true); });
   };
-  openModal(again ? "Another legend?" : `Legends of the ${who.name}?`,
-    el("div",{class:"row"}, el("button",{type:"button", class:"btn", onclick:closeModal}, again ? "Done" : "Skip"), el("span",{class:"grow"}), el("button",{type:"button", class:"btn primary", onclick:add}, "Add a legend")));
+  openModal(again ? "Another legend?" : `Add legends to the ${who.name}?`, [
+    el("p",{class:"note"}, "One for each player who paid for them."),
+    el("div",{class:"row"}, el("button",{type:"button", class:"btn", onclick:closeModal}, again ? "Done" : "Skip"), el("span",{class:"grow"}), el("button",{type:"button", class:"btn primary", onclick:add}, "Add a legend"))]);
 }
 function exitPower(){
   // a new ancestry that's been placed (and has no legends yet) offers to add the legends that arise with it
@@ -1628,8 +1634,10 @@ function fillSheet(){
       const who = brush && brush.v && peoples.get(brush.v);
       const hint = {"Found City": !who ? "Whose city?" : "Tap a hex for the city.", "Raise Army": "Tap a city.",
         "March Army": mode.army ? `Tap where ${mode.army.m.label} goes.` : "Tap an army.", "Build": "Tap a hex.", "Create Legend": "Tap a hex.",
-        "Exalt": mode.whole ? "Tap the land form." : "Tap a hex."}[mode.power];
-      sheet.append(el("div",{class:"shead"}, el("div",{class:"stitle"}, el("h2",{}, mode.power), steps.length > 1 ? el("span",{class:"coord"}, `step ${cur+1} of ${steps.length}`) : null)));
+        "Exalt": !mode.whole ? "Tap a hex." : stepSize(steps[cur]) ? "Tap hexes to add or remove." : "Tap the land form."}[mode.power];
+      const n = stepSize(steps[cur]), area = AGES[age][1], painting = mode.whole && brush && brush.k === "wonder";
+      sheet.append(el("div",{class:"shead"}, el("div",{class:"stitle"}, el("h2",{}, mode.power), steps.length > 1 ? el("span",{class:"coord"}, `step ${cur+1} of ${steps.length}`) : null),
+        painting ? el("span",{class:"count" + (n > area ? " over" : "")}, `${n} of ${area}`) : null));
       if (mode.power === "Found City" && peoples.size > 1) sheet.append(brushOptions());
       sheet.append(el("p",{class:"lead"}, hint));
       return;
