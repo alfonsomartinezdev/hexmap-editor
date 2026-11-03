@@ -151,6 +151,8 @@ canvas{display:block;width:100%;height:100%;touch-action:none;-webkit-touch-call
 .opt.brush[aria-pressed="true"]{border:2px solid var(--fg);background:var(--accent);color:var(--accent-ink);font-weight:700}
 .sheet .lead{margin:0;font-weight:700;font-size:1rem}
 .count.over{color:var(--danger);font-weight:700}
+.opt.has-corner{position:relative}
+.c-corner{position:absolute;top:3px;right:7px;font-size:.7rem;color:var(--muted)}
 .opt[disabled]{opacity:.55;cursor:default}
 .opt small.why{display:block;font-size:.78rem;color:var(--muted)}
 .histrow{display:flex;gap:8px;align-items:center}
@@ -684,6 +686,7 @@ function exitPower(){
   }
   mode = null; brush = null; clearSelection(); afterEdit();
 }
+const costOf = pw => COST[pw] ? COST[pw][age - 1] : "";
 function needs(pw){
   if (["Create Heritage","Settle","Found City"].includes(pw) && !peoples.size) return "Needs a people first";
   if (pw === "Raise Army" && !allThings("city").length) return "Needs a city first";
@@ -694,7 +697,9 @@ function choosePower(){
   const body = [], go = pw => () => PEOPLE_POWERS.has(pw) ? startPeoplePower(pw) : ASK_FIRST.has(pw) ? startPlacePower(pw) : enterPower(pw);
   // a power that can't be used yet is shown greyed out, with what it needs, right where you'd tap it
   for (const [group, list] of PAINT_POWERS) body.push(el("p",{class:"sub"}, group), el("div",{class:"opts"}, list.map(pw => { const why = needs(pw);
-    return el("button",{type:"button", class:"opt", disabled: why ? true : null, onclick:go(pw)}, el("span",{}, pw, why ? el("small",{class:"why"}, why) : null)); })));
+    // the cost for this age, small in the button's corner, like the cost on a card
+    return el("button",{type:"button", class:"opt has-corner", disabled: why ? true : null, "aria-label": `${pw}, ${costOf(pw)} power${why ? ". " + why : ""}`, onclick:go(pw)},
+      el("span",{}, pw, el("span",{class:"c-corner","aria-hidden":"true"}, costOf(pw)), why ? el("small",{class:"why"}, why) : null)); })));
   body.push(el("p",{class:"note"}, "For anything else, use Edit freely."));
   openModal("Use a power", body);
 }
@@ -1696,14 +1701,14 @@ function fillSheet(){
         "March Army": mode.army ? `Tap where ${mode.army.m.label} goes.` : "Tap an army.", "Build": "Tap a hex.", "Create Legend": mode.legend ? `Tap where ${mode.legend} is.` : "",
         "Exalt": !mode.whole ? "Tap a hex." : stepSize(steps[cur]) ? "Tap hexes to add or remove." : "Tap the land form."}[mode.power];
       const n = stepSize(steps[cur]), area = AGES[age][1], painting = mode.whole && brush && brush.k === "wonder";
-      sheet.append(el("div",{class:"shead"}, stepArrows()[0], el("div",{class:"stitle"}, el("h2",{}, mode.power), steps.length > 1 ? el("span",{class:"coord"}, `step ${cur+1} of ${steps.length}`) : null),
+      sheet.append(el("div",{class:"shead"}, stepArrows()[0], el("div",{class:"stitle"}, el("h2",{}, mode.power), el("span",{class:"coord"}, [`${costOf(mode.power)} power`, steps.length > 1 ? `step ${cur+1} of ${steps.length}` : ""].filter(Boolean).join(" · "))),
         painting ? el("span",{class:"count" + (n > area ? " over" : "")}, `${n} of ${area}`) : null, stepArrows()[1]));
       if (mode.power === "Found City" && peoples.size > 1) sheet.append(brushOptions());
       sheet.append(el("p",{class:"lead"}, hint));
       return;
     }
     const n = stepSize(steps[cur]), area = AGES[age][1], limited = AREA_POWERS.has(mode.power);
-    sheet.append(el("div",{class:"shead"}, stepArrows()[0], el("div",{class:"stitle"}, el("h2",{}, mode.power), steps.length > 1 ? el("span",{class:"coord"}, `step ${cur+1} of ${steps.length}`) : null),
+    sheet.append(el("div",{class:"shead"}, stepArrows()[0], el("div",{class:"stitle"}, el("h2",{}, mode.power), el("span",{class:"coord"}, [`${costOf(mode.power)} power`, steps.length > 1 ? `step ${cur+1} of ${steps.length}` : ""].filter(Boolean).join(" · "))),
       el("span",{class:"count" + (limited && n > area ? " over" : "")}, limited ? `${n} of ${area}` : `${n} ${n === 1 ? "hex" : "hexes"}`), stepArrows()[1]));
     if (limited && n > area) sheet.append(el("p",{class:"stepwarn", role:"status"}, `⚠ ${n} hexes is more than one area (${area}).`));
     const strip = brushOptions(), x = brushOptions.scroll || 0;

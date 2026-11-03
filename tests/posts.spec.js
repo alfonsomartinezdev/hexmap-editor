@@ -53,7 +53,7 @@ test.describe("powers first", () => {
     await app.zoomIn();
   });
   const bar = app => app.page.locator("#draftBar");
-  const usePower = async (app, power) => { await bar(app).getByRole("button", { name: "Use a power" }).click(); await app.page.locator("#mBody").getByRole("button", { name: power, exact: true }).click(); };
+  const usePower = async (app, power) => { await bar(app).getByRole("button", { name: "Use a power" }).click(); await app.page.locator("#mBody").getByRole("button", { name: new RegExp(`^${power}, \\d+ power`) }).click(); };
 
   test("tapping a hex only shows it", async ({ app }) => {
     await expect(bar(app).getByRole("button", { name: "Edit freely" })).toBeVisible();
