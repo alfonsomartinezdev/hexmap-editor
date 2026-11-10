@@ -197,6 +197,16 @@ test.describe("powers first", () => {
     await expect(app.page.locator("#summary")).toHaveValue("**Shape Land(3x2):** Water\n**Shape Land(3):** Forest");
   });
 
+  test("Shape Land can make a new land and paint with it", async ({ app }) => {
+    await usePower(app, "Shape Land");
+    await app.button("New land…").click();
+    await app.page.locator("#landName").fill("Salt flat");
+    await app.page.locator("#mBody").getByRole("button", { name: "Add land" }).click();
+    await app.tapHex(16, 26);
+    expect((await app.view("h16_26")).t).toMatch(/^x-/);
+    await expect(app.page.locator("#sheet .brushes [aria-pressed=true]")).toContainText("Salt flat");
+  });
+
   test("edit freely is today's full editing", async ({ app }) => {
     await bar(app).getByRole("button", { name: "Edit freely" }).click();
     await app.setLand(16, 26, "Hills"); await app.done();
