@@ -740,6 +740,11 @@ function paintHex(id){
   else { const n = d.n || []; setField(id, "n", n.includes(brush.v) ? n.filter(x => x !== brush.v) : [...n, brush.v]); }
   afterEdit(); say(describe(...parse(id)));
 }
+function newLandBrush(){
+  landForm.state = null;
+  const f = landForm(null, key => { closeModal(); brush = {k:"land", v:key}; brushOptions.scroll = 1e6; afterEdit(); });
+  openModal("New land", [f, el("div",{class:"row"}, el("span",{class:"grow"}), el("button",{type:"button", class:"btn primary", onclick:() => f.requestSubmit()}, "Add land"))]);
+}
 function brushOptions(){
   const o = el("div",{class:"brushes", role:"group", "aria-label":"Paint"}), pick = b => { brush = b; renderSheet(); };
   const on = b => brush && brush.k === b.k && brush.v === b.v;
@@ -747,7 +752,8 @@ function brushOptions(){
   if (mode.power === "Shape Land"){
     for (const [k,name] of LAND) o.append(opt({k:"land", v:k}, [landIcon(k), name]));
     for (const [k,v] of customLand) o.append(opt({k:"land", v:k}, [landIcon(k), v.name]));
-    o.append(opt({k:"river"}, [hatchSwatch(RIVER_BLUE, "waves", 28), "River"]), opt({k:"land", v:null}, ["Clear land"]));
+    o.append(opt({k:"river"}, [hatchSwatch(RIVER_BLUE, "waves", 28), "River"]), opt({k:"land", v:null}, ["Clear land"]),
+      el("button",{type:"button", class:"opt other", onclick:newLandBrush}, "New land…"));
   } else if (mode.power === "Catastrophe"){
     o.append(opt({k:"wipe"}, ["Wipe land"]), opt({k:"destroy"}, ["Destroy"]));
   } else if (mode.power === "Found City"){
@@ -1814,12 +1820,14 @@ function lookalike(color, pen){
   for (const [,v] of customLand) if (v.color === color && penFor(v) === pen) return v.name;
   return null;
 }
-function landForm(ids){
+// a new land: pen, color, name. With `made`, the new land is handed back (Shape Land paints with it) instead of applied to `ids`
+function landForm(ids, made){
   const used = new Set([...LAND.map(l => l[3]), ...[...customLand.values()].map(penFor)]);
   const st = landForm.state || (landForm.state = {pen: PEN_KEYS.find(p => !used.has(p)) || "back", color:LAND_COLORS[8][1], name:""});
   const f = el("form",{class:"form", onsubmit:async (e)=>{ e.preventDefault();
     const nm = st.name.trim(); if (!nm){ input.focus(); toast("Give the land a name."); return; }
     const key = await addCustom("land", nm, st.color, st.pen); landForm.state = null;
+    if (made) return made(key);
     applyAll(ids, id => setField(id,"t",key), `${nm} on ${ids.length} ${ids.length===1?"hex":"hexes"}.`);
   }});
   const preview = el("div",{class:"row"}), warn = el("p",{class:"note", role:"status"});
