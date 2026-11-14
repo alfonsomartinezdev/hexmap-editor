@@ -1135,7 +1135,8 @@ function paintMap(){
     ctx.lineWidth = Math.max(1.6*lw, S*.1); ctx.stroke();
   }
   // rivers: a see-through highlighter stroke, one piece per hex. River hexes that touch are joined as a tree
-  // (no loops), each river reaches water at one point, and every piece meets its hex edge at the middle.
+  // (no loops); a river flows into water at its mouth and at any other end that touches water,
+  // and every piece meets its hex edge at the middle.
   {
     const isWater = d => d && (d.t==="sea" || d.t==="lake" || (landInfo(d.t)||{}).pen==="waves");
     const rv = new Set();
@@ -1154,6 +1155,9 @@ function paintMap(){
       while (bq.length){ const id = bq.shift(), [c,r] = parse(id);
         for (const [nc,nr] of edgeNeighbors(c,r)){ const n = hid(nc,nr); if (rv.has(n) && !done.has(n)){ done.add(n); bq.push(n); links.get(id).push(n); links.get(n).push(id); } } }
       if (mouth) links.get(mouth).push(sea);
+      // any other river end that touches water flows into it too (two rivers joined upstream can both reach a lake)
+      for (const id of group){ if (id === mouth || links.get(id).length > 1) continue; const [c,r] = parse(id);
+        const w = edgeNeighbors(c,r).find(([nc,nr]) => inB(nc,nr) && isWater(view(hid(nc,nr)))); if (w) links.get(id).push(hid(...w)); }
     }
     const edgeOf = (id, n) => { const [c,r] = parse(id), [nc,nr] = parse(n); return edgeNeighbors(c,r).findIndex(([a,b]) => a === nc && b === nr); };
     // the river runs straight through this hex (in one side, out the opposite)
