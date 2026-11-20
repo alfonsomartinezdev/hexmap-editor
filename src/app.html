@@ -427,7 +427,7 @@ function wire(changes){
 function applyDefs(list){
   for (const p of list){
     for (const [id,t] of Object.entries(p.types || {})){ if (t.kind === "land") customLand.set("x-"+id, {name:t.name, color:t.color||"#8f8a82", pen:t.pen, glyph:t.glyph}); else if (t.name) customNat.set(t.name, t.glyph || customNat.get(t.name) || null); }
-    for (const [id,v] of Object.entries(p.peoples || {})) peoples.set(id, {name:v.name, color:v.color, ...(v.of ? {of: v.of} : {})});
+    for (const [id,v] of Object.entries(p.peoples || {})) peoples.set(id, {...(peoples.get(id) || {}), name:v.name, color:v.color, ...(v.of ? {of: v.of} : {}), ...(v.fields ? {fields: v.fields} : {})});
     if (p.world){ if (AGES[p.world.age]) age = p.world.age; if (p.world.cols && p.world.rows){ COLS = p.world.cols; ROWS = p.world.rows; } }
   }
 }
@@ -542,8 +542,40 @@ function startPlacePower(pw){
   }
   if (pw === "Exalt") openModal("Exalt", el("div",{class:"opts"},
       el("button",{type:"button", class:"opt", onclick:() => { mode.whole = false; closeModal(); renderSheet(); }}, "One hex"),
-      el("button",{type:"button", class:"opt", onclick:() => { closeModal(); mode.whole = true; brush = {k:"wonder", v:"New wonder"}; steps[cur].unnamed = true; renderSheet(); draw(); }}, "Land form")));
+      el("button",{type:"button", class:"opt", onclick:() => { closeModal(); mode.whole = true; brush = {k:"wonder", v:"New wonder"}; steps[cur].unnamed = true; renderSheet(); draw(); }}, "Land form"),
+      el("button",{type:"button", class:"opt", disabled: peoples.size ? null : true, onclick:exaltPeople}, el("span",{}, "A people", peoples.size ? null : el("small",{class:"why"}, "Needs a people first"))),
+      el("button",{type:"button", class:"opt", disabled: legendNames().length ? null : true, onclick:exaltLegend}, el("span",{}, "A legend", legendNames().length ? null : el("small",{class:"why"}, "Needs a legend first")))));
 }
+// Exalt a people: they gain a field (a science, craft or magic). It's kept on the step until you publish
+function exaltPeople(){
+  const pick = (pid, who) => {
+    const input = el("input",{id:"thingName", placeholder:"Field, such as Starforging", autocomplete:"off"});
+    openModal(`Exalt the ${who.name}`, el("form",{class:"form", onsubmit:e => { e.preventDefault(); const v = input.value.trim(); if (!v){ input.focus(); return; }
+        snapshot(); steps[cur].exalt = {pid, field: v}; steps[cur].thing = `${who.name} (${v})`; closeModal(); exitPower(); toast(`${who.name}: ${v}.`); }},
+      el("label",{for:"thingName"}, "Field"), input, el("div",{class:"row"}, el("span",{class:"grow"}), el("button",{type:"submit", class:"btn primary"}, "Exalt"))));
+    setTimeout(() => input.focus(), 50);
+  };
+  openModal("Which people?", el("div",{class:"opts"}, [...peoples].map(([pid, v]) => el("button",{type:"button", class:"opt", onclick:() => pick(pid, v)}, swatch(v.color), v.name))));
+}
+// Exalt a legend: no name to type, it just counts up, (1) then (2). A legend can be exalted twice.
+const allSteps = () => [...posts.flatMap(p => p.steps || []), ...steps];
+function legendNames(){
+  const names = new Set(allThings("legend").map(x => x.m.label));
+  for (const st of allSteps()) if (st.power === "Create Legend" && st.thing && !st.unnamed) names.add(st.thing);
+  return [...names].filter(Boolean);
+}
+const timesExalted = name => allSteps().filter(st => st.power === "Exalt" && st.legend === name).length;
+function exaltLegend(){
+  openModal("Which legend?", el("div",{class:"opts"}, legendNames().map(name => { const n = timesExalted(name);
+    return el("button",{type:"button", class:"opt", disabled: n >= 2 ? true : null, onclick:() => {
+      snapshot(); const st = steps[cur]; st.legend = name; st.thing = `${name} (${n + 1})`;
+      const on = allThings("legend").find(x => x.m.label === name);     // on the map, the legend's mark carries the count too
+      if (on) setField(on.id, "m", ((view(on.id) || {}).m || []).map(m => m.id === on.m.id ? {...m, ex: n + 1} : m));
+      closeModal(); exitPower(); toast(`${name} (${n + 1}).`); }},
+      el("span",{}, name, n ? el("small",{class:"why"}, n >= 2 ? "Exalted twice already" : "Exalted once") : null)); })));
+}
+// a people's fields: published ones, then any this draft is exalting them in
+const fieldsOf = pid => [...((peoples.get(pid) || {}).fields || []), ...steps.filter(st => st.exalt && st.exalt.pid === pid).map(st => st.exalt.field)];
 // an exalted land form: the connected hexes of the same land, nearest first, up to one area or the end of that land
 function landFormOf(id){
   const t = (view(id) || {}).t, area = AGES[age][1], out = [id], seen = new Set([id]);
@@ -769,11 +801,11 @@ function brushOptions(){
   return o;
 }
 // undo belongs to a step: each step keeps its own history, so Undo only takes back changes in the step you're on
-function snapshot(){ const st = steps[cur], u = st.u || (st.u = []); u.push(JSON.stringify({ch: st.ch, thing: st.thing || null})); if (u.length > 40) u.shift(); }
+function snapshot(){ const st = steps[cur], u = st.u || (st.u = []); u.push(JSON.stringify({ch: st.ch, thing: st.thing || null, exalt: st.exalt || null, legend: st.legend || null})); if (u.length > 40) u.shift(); }
 const canUndo = () => !!(steps[cur].u && steps[cur].u.length);
 function undo(quiet){
   if (!canUndo()) return;
-  const st = steps[cur], prev = JSON.parse(st.u.pop()); st.ch = prev.ch; if (prev.thing) st.thing = prev.thing; else delete st.thing; rebuildDraft();
+  const st = steps[cur], prev = JSON.parse(st.u.pop()); st.ch = prev.ch; if (prev.thing) st.thing = prev.thing; else delete st.thing; if (prev.exalt) st.exalt = prev.exalt; else delete st.exalt; if (prev.legend) st.legend = prev.legend; else delete st.legend; rebuildDraft();
   sheetForm = null; afterEdit(); if (!quiet){ toast("Undone."); say("Undone."); }
 }
 function afterEdit(){ saveDraftLocal(); renderDraftBar(); renderSheet(); draw(); }
@@ -1261,7 +1293,7 @@ function paintMap(){
       roughShape(ctx, "dot", x, y, r0*1.27, 5, .08); ctx.fillStyle = surface; ctx.fill(); ctx.lineWidth = r0*.14; ctx.strokeStyle = ink; ctx.stroke();
       ctx.fillStyle = ink; ctx.font = `700 ${r0*.95}px "Space Mono", monospace`; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(`+${ms.length-3}`, x, y + r0*.04); }
     if (px >= 46){
-      const labels = ms.filter(m => m.label), label = labels.length ? labels[0].label + (labels.length > 1 ? ` +${labels.length-1}` : "") : "";
+      const labels = ms.filter(m => m.label), label = labels.length ? labels[0].label + (labels[0].ex ? ` (${labels[0].ex})` : "") + (labels.length > 1 ? ` +${labels.length-1}` : "") : "";
       if (label){ ctx.font = `700 ${S*.24}px "Atkinson Hyperlegible", sans-serif`; ctx.textAlign="center"; ctx.textBaseline="middle";
         let t = label; while (t.length > 3 && ctx.measureText(t).width > S*.85) t = t.slice(0,-2) + "…";
         const w = ctx.measureText(t).width + S*.2, ty = cy - S*.72, h = S*.3;
@@ -1328,7 +1360,7 @@ function describe(c,r){
   if (d.n && d.n.length) parts.push("Natures: " + d.n.join(", ") + ".");
   if (d.p && peoples.has(d.p)) parts.push("Settled by " + peoples.get(d.p).name + ".");
   if (d.w) parts.push("Part of the wonder " + d.w + ".");
-  if (d.m && d.m.length) parts.push("Markers: " + d.m.map(m => `${(PALETTE.find(p=>p[1]===m.color)||[""])[0]} ${(MARKERS[m.k]?.[0]||"marker").toLowerCase()}${m.label?" "+m.label:""}`.trim()).join(", ") + ".");
+  if (d.m && d.m.length) parts.push("Markers: " + d.m.map(m => `${(PALETTE.find(p=>p[1]===m.color)||[""])[0]} ${(MARKERS[m.k]?.[0]||"marker").toLowerCase()}${m.label?" "+m.label:""}${m.ex?` (${m.ex})`:""}`.trim()).join(", ") + ".");
   if (selection.has(hid(c,r))) parts.push("Selected.");
   return parts.join(" ");
 }
@@ -1786,7 +1818,7 @@ function rowsFor(ids){
   let ppl;
   if (noLand) ppl = [none("Needs land first")];
   else if (!allSame("p")) ppl = [none("Mixed")];
-  else if (ds[0].p && peoples.has(ds[0].p)) ppl = [swatch(peoples.get(ds[0].p).color), peoples.get(ds[0].p).name];
+  else if (ds[0].p && peoples.has(ds[0].p)) ppl = [swatch(peoples.get(ds[0].p).color), peoples.get(ds[0].p).name + (fieldsOf(ds[0].p).length ? ` (${fieldsOf(ds[0].p).join(", ")})` : "")];
   else ppl = [none("No one")];
   const ms = n === 1 ? (ds[0].m || []) : [];
   const mkV = noLand && !ms.length ? [none("Needs land first")] : ms.length ? ms.slice(0,6).map(m => markerIcon(m.k, m.color)) : [none("None")];
@@ -2046,10 +2078,13 @@ async function publishPost(){
   closeModal();
   const all = combine(steps.length);
   const post = newPost({ changes: wire(Object.fromEntries(all)) });
-  const used = steps.filter(stepUsed).map(st => ({ power: st.power || "", hexes: Object.keys(st.ch), ...(st.thing ? {thing: st.thing} : {}) }));   // not its undo history
+  const used = steps.filter(stepUsed).map(st => ({ power: st.power || "", hexes: Object.keys(st.ch), ...(st.thing ? {thing: st.thing} : {}), ...(st.legend ? {legend: st.legend} : {}) }));   // not its undo history
   if (used.length && powersOn()) post.steps = used;
   if (Object.keys(draftDefs.types).length) post.types = draftDefs.types;
-  if (Object.keys(draftDefs.peoples).length) post.peoples = draftDefs.peoples;
+  if (Object.keys(draftDefs.peoples).length) post.peoples = {...draftDefs.peoples};
+  // exalted fields travel with the people they belong to
+  for (const st of steps) if (st.exalt && peoples.has(st.exalt.pid)){ const pid = st.exalt.pid, def = (post.peoples || {})[pid] || peoples.get(pid);
+    post.peoples = {...(post.peoples || {}), [pid]: {name: def.name, color: def.color, ...(def.of ? {of: def.of} : {}), fields: fieldsOf(pid)}}; }
   const btn = $("saveBtn"); if (btn) { btn.disabled = true; btn.textContent = "Publishing…"; }
   stateDue = post.id;          // set first: the post can come back on the live stream before publish returns
   try { await backend.publish(post); }
@@ -2330,7 +2365,7 @@ function openPeoples(pid){
   }
   const list = el("div",{class:"keylist"});
   for (const [id,p] of peoples) list.append(el("button",{type:"button", class:"link", "aria-label":`${p.name}: change border color`, onclick:()=>openPeoples(id)},
-    el("span",{class:"row", style:"gap:10px"}, swatch(p.color), el("strong",{}, p.name)), el("span",{class:"when","aria-hidden":"true"}, "›")));
+    el("span",{class:"row", style:"gap:10px"}, swatch(p.color), el("strong",{}, p.name), fieldsOf(id).length ? el("span",{class:"note"}, `(${fieldsOf(id).join(", ")})`) : null), el("span",{class:"when","aria-hidden":"true"}, "›")));
   openModal("Peoples", peoples.size ? [el("p",{class:"note"}, "Tap a people to change its border color."), list] : [el("p",{class:"empty"}, "No peoples yet. Add one from a hex's Settled by.")]);
 }
 { const t = readThemeCookie() || lsGet("soc-theme"); document.documentElement.dataset.mode = t === "dark" ? "dark" : "light"; }
@@ -2434,13 +2469,13 @@ function mapState(){
     if (h.p) o.people = (peoples.get(h.p) || {}).name || h.p;
     if (h.n && h.n.length) o.natures = h.n;
     if (h.w) o.wonder = h.w;
-    if (h.m && h.m.length) o.markers = h.m.map(m => ({shape: (MARKERS[m.k] || ["Marker"])[0], color: color(m.color), ...(m.label ? {label: m.label} : {}), ...(m.x ? {destroyed: true} : {})}));
+    if (h.m && h.m.length) o.markers = h.m.map(m => ({shape: (MARKERS[m.k] || ["Marker"])[0], color: color(m.color), ...(m.label ? {label: m.label} : {}), ...(m.ex ? {exalted: m.ex} : {}), ...(m.x ? {destroyed: true} : {})}));
     hexes[id] = o;
   }
   const last = posts[posts.length-1] || {}, t = nowTurn();
   return { map: mapId || null, age: AGES[age][0], turn: `${AGES[t.age][0]} · Turn ${t.turn}`, posts: posts.length,
     lastPost: {by: last.name || null, at: last.at || null},
-    peoples: Object.fromEntries([...peoples].map(([id,v]) => [v.name, {color: color(v.color)}])), hexes };
+    peoples: Object.fromEntries([...peoples].map(([id,v]) => [v.name, {color: color(v.color), ...(v.fields && v.fields.length ? {fields: v.fields} : {})}])), hexes };
 }
 function onPosts(list){
   const pc = COLS, pr = ROWS;
