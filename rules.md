@@ -262,7 +262,7 @@ Exalt gives one thing no other of its kind has. A land form, a people, or a lege
 
 **A people** gains one field: a science, craft, or magic. While the people persists, no other people equals them in it.
 
-**A legend** gains something it carries, or something it can do, that becomes its story. An exalted legend can Perform Deed; see Perform Deed for what a legend exalted once or twice may found.
+**A legend** exalted is mythical rather than heroic: its deeds are as large as myth, and once in its life it may found a heritage. Exalted twice, it may found an ancestry instead, once; see Perform Deed.
 
 #### Align
 
