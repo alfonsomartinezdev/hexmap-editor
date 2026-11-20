@@ -185,6 +185,34 @@ test.describe("powers first", () => {
     await expect(app.page.locator("#summary")).toHaveValue("**Create Legend(10):** The Wanderer");
   });
 
+  test("exalt a people: they gain a field, shown in the powers list and kept with the people", async ({ app }) => {
+    await usePower(app, "Shape Land"); await app.button("Plains").click(); await app.tapHex(14, 26); await app.footer("Done").click();
+    await usePower(app, "Create Ancestry"); await app.tapHex(14, 26); await app.footer("Done").click();
+    await app.page.locator("#otherName").fill("Elves"); await app.page.locator("#mBody").getByRole("button", { name: "Done" }).click();
+    await usePower(app, "Exalt");
+    await app.page.locator("#mBody").getByRole("button", { name: "A people" }).click();
+    await app.page.locator("#mBody").getByRole("button", { name: "Elves" }).click();
+    await app.page.locator("#thingName").fill("Starforging"); await app.page.locator("#mBody").getByRole("button", { name: "Exalt" }).click();
+    await app.page.locator("#saveBtn").click();
+    await expect(app.page.locator("#summary")).toHaveValue("**Shape Land(3):** Plains\n**Create Ancestry(22):** Elves\n**Exalt(6):** Elves (Starforging)");
+    await app.page.locator("#mBody").getByRole("button", { name: "Publish" }).click();
+    await expect.poll(() => app.page.evaluate(() => Object.values(window.__mockStore.all()).flatMap(p => Object.values(p.peoples || {})).map(v => v.fields || null))).toContainEqual(["Starforging"]);
+  });
+
+  test("exalt a legend: it just counts up, twice at most", async ({ app }) => {
+    await usePower(app, "Create Legend");
+    await app.page.locator("#thingName").fill("The Wanderer"); await app.page.locator("#mBody").getByRole("button", { name: "Not on the map" }).click();
+    for (let i = 0; i < 2; i++){
+      await usePower(app, "Exalt"); await app.page.locator("#mBody").getByRole("button", { name: "A legend" }).click();
+      await app.page.locator("#mBody").getByRole("button", { name: /^The Wanderer/ }).click();
+    }
+    await usePower(app, "Exalt"); await app.page.locator("#mBody").getByRole("button", { name: "A legend" }).click();
+    await expect(app.page.locator("#mBody").getByRole("button", { name: /^The Wanderer/ })).toBeDisabled();
+    await app.page.locator("#mClose").click(); await app.footer("Done").click();
+    await app.page.locator("#saveBtn").click();
+    await expect(app.page.locator("#summary")).toHaveValue("**Create Legend(10):** The Wanderer\n**Exalt(6):** The Wanderer (1)\n**Exalt(6):** The Wanderer (2)");
+  });
+
   test("a new people never placed is dropped when you leave", async ({ app }) => {
     await usePower(app, "Create Ancestry");
     await app.footer("Done").click();
