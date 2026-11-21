@@ -190,7 +190,7 @@ Act through the figures and companies the world remembers. The powers below the 
 
 | Power              | First age | Second age | Third age |
 | ------------------ | :-------: | :--------: | :-------: |
-| Create Legend      |     6     |     5      |     4     |
+| Create Legend      |     6     |     4      |     4     |
 | Resurrect Legend | 5 | 5 | 5 |
 | Perform Deed*      |     2     |     1      |     1     |
 | **Deeds** | | | |
@@ -511,7 +511,7 @@ Every power and its cost, by age. The rules for each are under Power.
 | Rouse, 1 area         | Land               |     4     |     4      |     4     |
 | Create Ancestry       | Peoples and Cities |    22     |     6      |    15     |
 | Create Heritage       | Peoples and Cities |    12     |     4      |    10     |
-| Create Legend         | Legends            |     6     |     5      |     4     |
+| Create Legend         | Legends            |     6     |     4      |     4     |
 | Resurrect Legend      | Legends            |     5     |     5      |     5     |
 | Perform Deed*         | Legends            |     2     |     1      |     1     |
 | Found City, 1 hex     | Legends, deeds     |     8     |     4      |     3     |
