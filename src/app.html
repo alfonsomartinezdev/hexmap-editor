@@ -665,7 +665,7 @@ function destroyAt(id){
 }
 // costs by age, from the Table of Powers
 const COST = {"Shape Land":[3,5,8], "Shape Climate":[2,4,6], "Rouse":[4,4,4], "Create Ancestry":[22,6,15], "Create Heritage":[12,4,10],
-  "Create Legend":[10,7,8], "Found City":[8,4,3], "Settle":[8,4,3], "Build":[6,4,2], "Raise Army":[6,4,2], "March Army":[4,3,2], "Exalt":[6,5,6], "Catastrophe":[10,10,10]};
+  "Create Legend":[6,5,4], "Found City":[8,4,3], "Settle":[8,4,3], "Build":[6,4,2], "Raise Army":[6,4,2], "March Army":[4,3,2], "Exalt":[6,5,6], "Catastrophe":[10,10,10]};
 // the powers a turn used, ready to paste into Discord; uses that are the same power and the same thing collapse: **Shape Land(3x2):** Water
 // list: steps ({power, ch, thing}); prior: the map before them (hex -> state); a: the age they were in
 function turnSummary(list = steps, prior = base, a = age){

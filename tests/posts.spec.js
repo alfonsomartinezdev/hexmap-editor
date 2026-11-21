@@ -182,7 +182,7 @@ test.describe("powers first", () => {
     await app.page.locator("#thingName").fill("The Wanderer"); await app.page.locator("#mBody").getByRole("button", { name: "Not on the map" }).click();
     await expect(bar(app)).toContainText("Create Legend · The Wanderer");
     await app.page.locator("#saveBtn").click();
-    await expect(app.page.locator("#summary")).toHaveValue("**Create Legend(10):** The Wanderer");
+    await expect(app.page.locator("#summary")).toHaveValue("**Create Legend(6):** The Wanderer");
   });
 
   test("exalt a people: they gain a field, shown in the powers list and kept with the people", async ({ app }) => {
@@ -210,7 +210,7 @@ test.describe("powers first", () => {
     await expect(app.page.locator("#mBody").getByRole("button", { name: /^The Wanderer/ })).toBeDisabled();
     await app.page.locator("#mClose").click(); await app.footer("Done").click();
     await app.page.locator("#saveBtn").click();
-    await expect(app.page.locator("#summary")).toHaveValue("**Create Legend(10):** The Wanderer\n**Exalt(6):** The Wanderer (1)\n**Exalt(6):** The Wanderer (2)");
+    await expect(app.page.locator("#summary")).toHaveValue("**Create Legend(6):** The Wanderer\n**Exalt(6):** The Wanderer (1)\n**Exalt(6):** The Wanderer (2)");
   });
 
   test("a new people never placed is dropped when you leave", async ({ app }) => {
