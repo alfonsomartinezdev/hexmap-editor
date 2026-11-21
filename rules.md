@@ -178,7 +178,7 @@ Bring ancestries and heritages into the world.
 
 #### Create Ancestry
 
-Bring a people into the world. An ancestry may be any kind of people. Each ancestry begins settled in an area and lives with natures of its land from the start. Players may pool power to create an ancestry within a round; if it is not created by the round's end, the power returns to its owners. A legend arises within the new people for each player who paid toward it, aligned toward that player at the first level.
+Bring a people into the world. An ancestry may be any kind of people. Each ancestry begins settled in an area and lives with natures of its land from the start. Players may pool power to create an ancestry within a round; if it is not created by the round's end, the power returns to its owners. Each player who paid toward it gains a legend within the new people, at no extra cost, aligned toward that player at the first level.
 
 #### Create Heritage
 
