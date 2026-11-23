@@ -4,7 +4,7 @@
 
 Songs of Creation is a game of building a world together. Each player is a god. The world begins empty, and over three ages the players fill it. Land is cheapest in the first age, peoples in the second, deeds in the third.
 
-Each round every player receives power and spends it on the powers below, or saves it. A player may spend power on any creation on the map (with some exceptions: please read alignment).
+Each round every player receives power and spends it on the powers below, or saves it. A player may spend power on any creation on the map, except where Align says otherwise.
 
 ## II. The World
 
@@ -186,7 +186,7 @@ Split a people from a people. A heritage shares an ancestor with an existing anc
 
 ### Legends
 
-Act through the figures and companies the world remembers. The powers below the divider are deeds. A people performs a deed only through a legend present where it happens.
+The powers below the divider are deeds. A people performs a deed only through a legend present where it happens.
 
 | Power              | First age | Second age | Third age |
 | ------------------ | :-------: | :--------: | :-------: |
@@ -205,11 +205,7 @@ Act through the figures and companies the world remembers. The powers below the 
 
 #### Create Legend
 
-Bring a legend into the world: a name the peoples will remember. A legend may be one figure, a dynasty, or a company of many, a guild, a sect, a crew, an order of knights, so long as the world remembers it as one thing.
-
-A legend acts as one character. It has one name. It may be anywhere its kind could plausibly reach, may pass from one people to another, and may exist before any people does.
-
-A legend gives presence: a people acts through it, by the deeds in the table above. Exalting a legend gives it more; see Exalt.
+Bring a legend into the world: one figure, a dynasty, or a company (a guild, a sect, an order of knights) that acts as one character with one name. It may be anywhere its kind could reach, may pass from one people to another, and may exist before any people does.
 
 #### Resurrect Legend
 
@@ -242,7 +238,7 @@ An army moves, or goes against a city or another army. Where it goes and what it
 
 #### Treat
 
-Two parties make a treaty: two cities, two settlements, or two peoples. The legend may be present with either party. While it holds, the armies of each party may not march on the other. The scope is set when the treaty is made, from one city and one settlement up to two peoples entire. A treaty may be broken at any time, but breaking it costs the same as making it, paid before the army marches.
+Two parties make a treaty: anything from a city and a settlement up to two whole peoples. The legend may be present with either party. While it holds, neither party's armies may march on the other. Breaking it costs the same as making it, paid before the army marches.
 ### Fate
 
 Raise the world's creations above their kind, turn its fates, and draw them to your side.
@@ -256,7 +252,7 @@ Raise the world's creations above their kind, turn its fates, and draw them to y
 
 #### Exalt
 
-Exalt gives one thing no other of its kind has. A land form, a people, or a legend may be exalted. A land form may be exalted once, resulting in a wonder. A people may be exalted once per field. A legend may be exalted twice.
+A land form may be exalted once, a people once per field, a legend twice.
 
 **A land form** gains a wonder: one thing in it, or the whole of it becoming its nature entirely. The land's nature says what fits.
 
