@@ -155,6 +155,8 @@ canvas{display:block;width:100%;height:100%;touch-action:none;-webkit-touch-call
 .c-corner{position:absolute;top:3px;right:7px;font-size:.7rem;color:var(--muted)}
 .opt[disabled]{opacity:.55;cursor:default}
 .opt small.why{display:block;font-size:.78rem;color:var(--muted)}
+.rv .things{display:flex;flex-direction:column;gap:4px;min-width:0}
+.rv .thing{display:flex;align-items:center;gap:8px;min-width:0}
 .histrow{display:flex;gap:8px;align-items:center}
 .stepwarn{flex:1 1 100%;margin:0;font-size:.85rem;font-weight:700}
 .dot{display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--draft);margin-right:6px;vertical-align:middle}
@@ -1267,6 +1269,7 @@ function paintMap(){
     }
   }
   // natures in ink along the bottom of the hex; markers as pieces in the middle
+  const nameTags = [];
   for (const [c,r,cx,cy,d,L] of cells){
     const nat = d.n || [];
     // natures sit on a little paper badge so they read clearly against any hatching
@@ -1294,14 +1297,22 @@ function paintMap(){
       ctx.fillStyle = ink; ctx.font = `700 ${r0*.95}px "Space Mono", monospace`; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(`+${ms.length-3}`, x, y + r0*.04); }
     if (px >= 46){
       const labels = ms.filter(m => m.label), label = labels.length ? labels[0].label + (labels[0].ex ? ` (${labels[0].ex})` : "") + (labels.length > 1 ? ` +${labels.length-1}` : "") : "";
-      if (label){ ctx.font = `700 ${S*.24}px "Atkinson Hyperlegible", sans-serif`; ctx.textAlign="center"; ctx.textBaseline="middle";
-        let t = label; while (t.length > 3 && ctx.measureText(t).width > S*.85) t = t.slice(0,-2) + "…";
-        const w = ctx.measureText(t).width + S*.2, ty = cy - S*.72, h = S*.3;
-        ctx.fillStyle = surface; ctx.beginPath(); ctx.roundRect ? ctx.roundRect(cx-w/2, ty-h/2, w, h, h/2) : ctx.rect(cx-w/2, ty-h/2, w, h); ctx.fill();
-        ctx.lineWidth = Math.max(lw, S*.03); ctx.strokeStyle = ink; ctx.stroke();
-        ctx.fillStyle = fg; ctx.fillText(t, cx, ty + S*.01); }
+      if (label) nameTags.push([cx, cy, label]);
     }
   }
+  // names of things go on last, so no outline or selection is drawn across them
+  const drawNameTags = () => { for (const [cx, cy, label] of nameTags){
+        ctx.font = `700 ${S*.24}px "Atkinson Hyperlegible", sans-serif`; ctx.textAlign="center"; ctx.textBaseline="middle";
+        // the name on up to two lines, a little wider than the hex, so "The Mirror of Answers" reads in full
+        const maxW = S*1.6, lines = [];
+        for (const word of label.split(" ")){ const tryLine = lines.length ? lines[lines.length-1] + " " + word : word;
+          if (lines.length && ctx.measureText(tryLine).width <= maxW) lines[lines.length-1] = tryLine; else lines.push(word); }
+        if (lines.length > 2){ lines.length = 2; lines[1] += "…"; }
+        for (let i = 0; i < lines.length; i++) while (lines[i].length > 3 && ctx.measureText(lines[i]).width > maxW) lines[i] = lines[i].slice(0,-2) + "…";
+        const lh = S*.27, w = Math.max(...lines.map(l => ctx.measureText(l).width)) + S*.2, h = lines.length*lh + S*.05, ty = cy - S*.6 - h/2;     // sits on top of the hex, growing upward
+        ctx.fillStyle = surface; ctx.beginPath(); ctx.roundRect ? ctx.roundRect(cx-w/2, ty-h/2, w, h, Math.min(h/2, S*.15)) : ctx.rect(cx-w/2, ty-h/2, w, h); ctx.fill();
+        ctx.lineWidth = Math.max(lw, S*.03); ctx.strokeStyle = ink; ctx.stroke();
+        ctx.fillStyle = fg; lines.forEach((l, i) => ctx.fillText(l, cx, ty - (lines.length-1)*lh/2 + i*lh + S*.01)); } };
   // highlight: dim every hex the chosen player never touched, outline the ones they did
   if (highlight){
     const dim = css("--void");
@@ -1347,6 +1358,7 @@ function paintMap(){
     const [cx,cy] = center(...focusHex); hexPath(cx,cy,S*.8);
     ctx.setLineDash([S*.25,S*.15]); ctx.strokeStyle = fg; ctx.lineWidth = Math.max(2*lw,S*.1); ctx.stroke(); ctx.setLineDash([]);
   }
+  drawNameTags();
   drawRulers(px);
   updateHint();
 }
@@ -1821,7 +1833,9 @@ function rowsFor(ids){
   else if (ds[0].p && peoples.has(ds[0].p)) ppl = [swatch(peoples.get(ds[0].p).color), peoples.get(ds[0].p).name + (fieldsOf(ds[0].p).length ? ` (${fieldsOf(ds[0].p).join(", ")})` : "")];
   else ppl = [none("No one")];
   const ms = n === 1 ? (ds[0].m || []) : [];
-  const mkV = noLand && !ms.length ? [none("Needs land first")] : ms.length ? ms.slice(0,6).map(m => markerIcon(m.k, m.color)) : [none("None")];
+  const KIND = {wonder:"Wonder", city:"City", army:"Army", legend:"Legend", built:"Built"};
+  const named = m => [markerIcon(m.k, m.color, 24), el("span",{}, [KIND[m.k], m.label ? m.label + (m.ex ? ` (${m.ex})` : "") : null].filter(Boolean).join(": ") || "", m.x ? " (destroyed)" : "")];
+  const mkV = noLand && !ms.length ? [none("Needs land first")] : ms.length ? (ms.some(m => m.label) ? [el("span",{class:"things"}, ms.slice(0,4).map(m => el("span",{class:"thing"}, ...named(m))))] : ms.slice(0,6).map(m => markerIcon(m.k, m.color))) : [none("None")];
   const spoken = (label, value) => label + ": " + (label === "Markers" && ms.length && !noLand ? ms.map(markerName).join(", ") : value.map(v => typeof v === "string" ? v : (v.textContent || "")).join(" ").trim());
   const row = (label, value, enabled) => el("button",{type:"button", class:"rowbtn", disabled: (!enabled || !can) || null,
       "aria-label": spoken(label, value), onclick:()=>{ sheetCat = label; sheetForm = null; renderSheet(); }},
